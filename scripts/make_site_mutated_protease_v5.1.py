@@ -640,6 +640,10 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
 
 def make_point_mutant_task_factory_only_protein(site_changes, ex12=True, \
     repacking_range=False):
+    """
+    Only repacking protein residues.
+    Written by Zhuofan
+    """
     tf = TaskFactory()
     tf.push_back(IncludeCurrent())
     if ex12:
