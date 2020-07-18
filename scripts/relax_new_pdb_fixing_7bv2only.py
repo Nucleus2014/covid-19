@@ -1,11 +1,13 @@
 import argparse
 from pyrosetta import *
+from pyrosetta.rosetta.core.chemical import ResidueProperty
 from pyrosetta.rosetta.core.pack.task.operation import \
 	IncludeCurrent, ExtraRotamers, OperateOnResidueSubset, \
 	RestrictAbsentCanonicalAASRLT, RestrictToRepackingRLT, \
 	PreventRepackingRLT
 from pyrosetta.rosetta.core.scoring import ScoreType as st
-from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+from pyrosetta.rosetta.core.select.residue_selector import \
+	ResiduePropertySelector
 from pyrosetta.rosetta.core.simple_metrics.metrics import RMSDMetric
 from pyrosetta.rosetta.protocols.constraint_generator import \
 	AddConstraints, CoordinateConstraintGenerator
@@ -88,11 +90,11 @@ def main(args):
 	tf.push_back(IncludeCurrent())
 	tf.push_back(ExtraRotamers(0, 1, 1))
 	tf.push_back(ExtraRotamers(0, 2, 1))
-	rna_chain_P_selector = ChainSelector('P,T')
+	protein_selector = ResiduePropertySelector(ResidueProperty.PROTEIN)
 	repack = RestrictToRepackingRLT()
-	tf.push_back(OperateOnResidueSubset(repack, rna_chain_P_selector, True))
+	tf.push_back(OperateOnResidueSubset(repack, protein_selector))
 	prevent = PreventRepackingRLT()
-	tf.push_back(OperateOnResidueSubset(prevent, rna_chain_P_selector))
+	tf.push_back(OperateOnResidueSubset(prevent, protein_selector, True))
 	fr.set_task_factory(tf)
 
 	# Determining file name
