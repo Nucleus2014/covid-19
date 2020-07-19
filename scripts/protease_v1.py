@@ -1232,7 +1232,7 @@ def main(args):
                 subs_clean = []
                 for sub in substitutions:
                     if sub[3] == True:
-                        subs_clean.append((sub[0],sub[1],sub[2]))
+                        subs_clean.append((sub[4],sub[0],sub[1],sub[2]))
                 mut_summary = [get_mutant_brief(s) for s in substitutions]
                 str_mut_sum = '-'.join(mut_summary)
                 outname = '{}_{}_{}.pdb'.format(tag, first_id, str_mut_sum)
@@ -1265,8 +1265,8 @@ def main(args):
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
     all_subs_info = pd.DataFrame(all_substitutions)
-    all_subs_info.columns = ['site', 'native', 'mutant']
-    all_subs_info = all_subs_info.sort_values(by=['site', 'mutant'])
+    all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
+    all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
 
 
