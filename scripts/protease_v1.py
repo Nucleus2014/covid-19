@@ -707,7 +707,25 @@ def make_point_mutant_task_factory_only_protein(site_changes, ex12=True, \
     return tf
 
 
-def make_point_changes(pose, task_factory, score_function):
+def make_move_map(pose, only_protein=False):
+    """
+    Generates a movemap for either (Minimization after Repacking) or 
+    (only FastRelax protein scaffold).
+    Written by Zhuofan
+    """
+    move_map = pr.MoveMap()
+    move_map.set_bb(True)
+    if only_protein:
+        protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
+        protein_res_true_vector = protein_selection.apply(pose)
+        move_map.set_chi(protein_res_true_vector)
+    else:
+        move_map.set_chi(True)
+    move_map.set_jump(True)
+    return move_map
+
+
+def repacking_with_muts_and_minimization(pose, task_factory, move_map, score_function):
     """
     Applies point mutations to a given pose. This is done through a 
     PackRotamersMover, followed by minimization.
@@ -718,7 +736,7 @@ def make_point_changes(pose, task_factory, score_function):
     # Make a copy Pose
     mutated_pose = pr.Pose(pose)
 
-    # If there is no mutation (i.e., the reference sequence), just run minimization
+    # Repacking
     if task_factory:
         # Apply changes with PackRotamersMover
         prm = PackRotamersMover()
@@ -728,15 +746,10 @@ def make_point_changes(pose, task_factory, score_function):
         # Apply the PackRotamersMover
         prm.apply(mutated_pose)
 
-    # Set up fixed-backbone movemap for minimization
-    movemap = pr.MoveMap()
-    movemap.set_bb(True)
-    movemap.set_chi(True)
-    movemap.set_jump(True)
-
-    # Minimize
+    # Minimization after repacking
+    # If there is no mutation (i.e., the reference sequence), just run minimization
     min_mover = MinMover()
-    min_mover.movemap(movemap)
+    min_mover.movemap(move_map)
     min_mover.score_function(score_function)
 
     # Apply the MinMover to the modified Pose
@@ -745,7 +758,7 @@ def make_point_changes(pose, task_factory, score_function):
     return mutated_pose
 
 
-def fast_relax_pose_with_muts(pose, task_factory, score_function, decoys):
+def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
     """
     Applies point mutations to a given pose. This is done through a 
     Fast Relax Mover.
@@ -754,8 +767,8 @@ def fast_relax_pose_with_muts(pose, task_factory, score_function, decoys):
     # Make FastRelax mover
     fast_relax = FastRelax()
     fast_relax.set_scorefxn(score_function)
-    # Set task factory for FastRelax mover
     fast_relax.set_task_factory(task_factory)
+    fast_relax.set_movemap(move_map)
 
     traj_idx = 0
     if_first_decoy = True
@@ -794,8 +807,7 @@ def make_mutant_model(ref_pose, substitutions, score_function, ex12=True, \
 
     Modified by Zhuofan.
     """
-
-    # Make the task factory to substitute residues and repack
+    # Make a task factory to substitute residues and repack
     if len(substitutions) > 0:
         if only_protein:
             tf = make_point_mutant_task_factory_only_protein(substitutions, \
@@ -805,17 +817,21 @@ def make_mutant_model(ref_pose, substitutions, score_function, ex12=True, \
                 repacking_range=repacking_range)
         if debugging_mode:
             print(tf.create_task_and_apply_taskoperations(ref_pose))
+    else:
+        tf = None
+
+    # Set up a flexible-backbone movemap
+    mm = make_move_map(ref_pose, only_protein=only_protein)
 
     # Make residue changes
-    if len(substitutions) == 0:
-        # If there is no mutation (i.e., the reference sequence), just run minimization
-        mutated_pose = make_point_changes(ref_pose, None, score_function)
-    elif not relax_decoys:
-        # Run both repacking and minimization
-        mutated_pose = make_point_changes(ref_pose, tf, score_function)
+    if len(substitutions) == 0 or (not relax_decoys):
+        # If there is no mutation (i.e., the reference sequence), just 
+        # run a minimization. Otherwise run both repacking and minimization.
+        mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
+            tf, mm, score_function)
     else:
-        mutated_pose = fast_relax_pose_with_muts(ref_pose, tf, score_function, \
-            relax_decoys)
+        mutated_pose = fast_relax_with_muts(ref_pose, tf, mm, \
+            score_function, relax_decoys)
 
     # Initialize data collection dict
     mutated_pose_data = {}
