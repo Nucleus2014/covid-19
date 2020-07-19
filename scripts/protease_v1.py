@@ -29,6 +29,7 @@ jhl133@scarletmail.rutgers.edu
 """
 
 import argparse
+import sys
 from Bio import SeqIO
 import datetime 
 from os import makedirs
@@ -119,7 +120,11 @@ def parse_args():
         using both symmetry and ligands, specify only ligand chains that are \
         bound to the main chain.')
     parser.add_argument('-sym', '--symmetry', type=str,
-        help='If the pose is symmetric, include a symdef file.)')
+        help='If the pose is symmetric, include a symdef file.')
+    parser.add_argument('-memb', '--membrane', required=False, action='store_true',
+        help='Declare if the protein is a membrane protein.')
+    parser.add_argument('-mspan', '--span_file', required='--membrane' or '-memb' in sys.argv,
+        help='If the pose is a membrane protein, include a spanfile.')
     parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
         default=None, help='The catalytic residues of the enzyme. By default, \
         no residues are so designated. If residues are specified, report will \
@@ -1150,15 +1155,29 @@ def main(args):
     # Load protease model
     wild_pose = pr.pose_from_pdb(args.template_pdb)
 
+    #Set membrane scorefunction if needed
+    if args.membrane:
+        base_sf = 'franklin2019'
+    else:
+        base_sf = 'ref2015_cst'
+
     # Get score function, applying symmetry if specified
     if args.symmetry:
         sf = SymmetricScoreFunction()
-        sf.add_weights_from_file('ref2015_cst')
+        sf.add_weights_from_file(base_sf)
 
         sfsm = SetupForSymmetryMover(args.symmetry)
         sfsm.apply(wild_pose)
     else:
-        sf = pr.create_score_function('ref2015_cst')
+        sf = pr.create_score_function(base_sf)
+    
+    #Set up membrane for membrane protein
+    if args.membrane:
+        if args.symmetry:
+            add_memb = pr.rosetta.protocols.membrane.symmetry.SymmetricAddMembraneMover(args.span_file)
+        else:
+            add_memb = pr.rosetta.protocols.membrane.AddMembraneMover(args.span_file)
+        add_memb.apply(wild_pose)
 
     # Apply constraints
     if args.constrain:
