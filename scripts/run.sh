@@ -68,30 +68,37 @@ else
  debugging_mode=""
 fi
 
-python ../scripts/split_fasta.py -i ${mutant_list} -t ${template_pdb} -n 12 ${check}
-
 prefix=${template_pdb%%"_"*}
 
-for job_idx in {1..12}
-do
+if [ -z "${cut_region_by_chains}" ]
+then
+ python ../scripts/split_fasta.py -i ${mutant_list} -t ${template_pdb} -n 12 ${check}
+
+ for job_idx in {1..12}
+ do
+  python ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
+   -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} \
+   ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${only_protein} \
+   ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode} &
+ done
+
+ while ! [ ${completed_jobs} == 24 ]
+ do
+  completed_jobs=`ls *part*csv | wc -l`
+  sleep 10
+ done
+
+ cp ${prefix}_part1_mutants.csv ${prefix}_mutants.csv
+ cp ${prefix}_part1_substitutions.csv ${prefix}_substitutions.csv
+ for i in {2..12}
+ do
+  tail -n +2 ${prefix}_part${i}_mutants.csv >> ${prefix}_mutants.csv
+  tail -n +2 ${prefix}_part${i}_substitutions.csv >> ${prefix}_substitutions.csv
+ done
+else
  python ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-  -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} \
-  ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${only_protein} \
-  ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode} &
-done
-
-while ! [ ${completed_jobs} == 24 ]
-do
- completed_jobs=`ls *part*csv | wc -l`
- sleep 10
-done
-
-cp ${prefix}_part1_mutants.csv ${prefix}_mutants.csv
-cp ${prefix}_part1_substitutions.csv ${prefix}_substitutions.csv
-for i in {2..12}
-do
- tail -n +2 ${prefix}_part${i}_mutants.csv >> ${prefix}_mutants.csv
- tail -n +2 ${prefix}_part${i}_substitutions.csv >> ${prefix}_substitutions.csv
-done
+  -m ${mutant_list} -rn ${prefix} ${symmertry} ${ex_rotamers} \
+  ${neighborhood_residue} ${only_protein} ${membrane} ${ind_type} ${debugging_mode}
+fi
 
 exit
