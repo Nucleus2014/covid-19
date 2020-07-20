@@ -7,6 +7,7 @@ do
    -sym) symmertry="$2";;
    -ex) ex_rotamers="$2";;
    -nbh) neighborhood_residue="$2";;
+   -op) only_protein=”$2”;;
    -cut) cut_region_by_chains=”$2”;;
    -mem) membrane=”$2”;;
    -ind) ind_type="$2";;
@@ -31,6 +32,13 @@ fi
 if ! [ -z "${neighborhood_residue}" ]
 then
  neighborhood_residue="-nbh ${neighborhood_residue}"
+fi
+
+if [ "${only_protein}" == "true" ]
+then
+ only_protein="-op"
+else
+ only_protein=""
 fi
 
 if ! [ -z "${cut_region_by_chains}" ]
@@ -66,7 +74,10 @@ prefix=${template_pdb%%"_"*}
 
 for job_idx in {1..12}
 do
- python ../scripts/make_site_mutated_protein.py -t ${template_pdb} -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode} &
+ python ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
+  -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} \
+  ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${only_protein} \
+  ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode} &
 done
 
 while ! [ ${completed_jobs} == 24 ]
