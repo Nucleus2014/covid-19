@@ -123,7 +123,8 @@ def parse_args():
         help='If the pose is symmetric, include a symdef file.')
     parser.add_argument('-memb', '--membrane', required=False, action='store_true',
         help='Declare if the protein is a membrane protein.')
-    parser.add_argument('-mspan', '--span_file', required='--membrane' or '-memb' in sys.argv,
+    parser.add_argument('-mspan', '--span_file', 
+        required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
     parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
         default=None, help='The catalytic residues of the enzyme. By default, \
