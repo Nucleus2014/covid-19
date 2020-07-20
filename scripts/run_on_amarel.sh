@@ -8,6 +8,7 @@ do
    -ex) ex_rotamers="$2";;
    -nbh) neighborhood_residue="$2";;
    -fr) fast_relax="$2";;
+   -cut) cut_region_by_chains=”$2”;;
    -mem) membrane=”$2”;;
    -ind) ind_type="$2";;
    -debug) debugging_mode="$2";;
@@ -33,6 +34,11 @@ fi
 if ! [ -z "${neighborhood_residue}" ]
 then
  neighborhood_residue="-nbh ${neighborhood_residue}"
+fi
+
+if ! [ -z "${cut_region_by_chains}" ]
+then
+ cut_region_by_chains="-cut ${cut_region_by_chains}"
 fi
 
 if ! [ -z "${membrane}" ]
@@ -77,7 +83,7 @@ prefix=${template_pdb%%"_"*}
 
 for job_idx in $(seq 1 ${total_jobs})
 do
- slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${membrane} ${ind_type} ${debugging_mode}"
+ slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode}"
  sleep 0.1
 done
 
