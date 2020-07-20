@@ -998,12 +998,15 @@ def replicate_seqs(replicates, analyze_lists):
     Find the replicate sequences' indices in the fasta files. The output format is shown below:
     {{'hCoV-19/South_Africa/R05475/2020':SeqRecord1, SeqRecord2}
     """
-    id1 = []
-    inds = {}
-    for lt in analyze_lists:
-        id1.append([str(x.id).split("|")[3] for x in lt])
-    for rep in replicates.keys():
-        inds[rep]=([analyze_lists[y][id1[y].index(rep)] for y in list(replicates[rep])])
+    if replicates != None:
+        id1 = []
+        inds = {}
+        for lt in analyze_lists:
+            id1.append([str(x.id).split("|")[3] for x in lt])
+        for rep in replicates.keys():
+            inds[rep]=([analyze_lists[y][id1[y].index(rep)] for y in list(replicates[rep])])
+    else:
+        inds = None
     return inds
  
 def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, ind_type, main_chain=1,  
@@ -1189,10 +1192,14 @@ def main(args):
         
     #wt = fasta_list[0]
     # split wild_pose into different parts that are corresponding to cut_regions
-    cut = args.cut_region_by_chains.strip().split(",")
     pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, list_fasta_names)
     print("Cut regions of the pdb and their start index in the pdb are:")
     print(pdb_seqs)
+
+    if args.cut_region_by_chains is not None:
+        cut = args.cut_region_by_chains.strip().split(",")
+    else:
+        cut = list(pdb_seqs.keys())[0]
 
     # Iterate through all identified fasta sequences, altering protease model
     all_mutants_info = pd.DataFrame([])

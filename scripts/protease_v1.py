@@ -1109,7 +1109,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     else:
         mutated_pose = None
         pose = ref_pose
-
+    print(pose.split_by_chain())
     # Add substitution layer to output data
     layers = [identify_res_layer(pose, pm[0], main_chain=main_chain) 
         for pm in new_subs]
