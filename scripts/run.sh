@@ -7,9 +7,9 @@ do
    -sym) symmertry="$2";;
    -ex) ex_rotamers="$2";;
    -nbh) neighborhood_residue="$2";;
-   -op) only_protein=”$2”;;
-   -cut) cut_region_by_chains=”$2”;;
-   -mem) membrane=”$2”;;
+   -op) only_protein="$2";;
+   -cut) cut_region_by_chains="$2";;
+   -mem) membrane="$2";;
    -ind) ind_type="$2";;
    -chk) check="$2";;
    -debug) debugging_mode="$2";;
