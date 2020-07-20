@@ -8,6 +8,7 @@ do
    -ex) ex_rotamers="$2";;
    -nbh) neighborhood_residue="$2";;
    -fr) fast_relax="$2";;
+   -mem) membrane=”$2”;;
    -ind) ind_type="$2";;
    -debug) debugging_mode="$2";;
    -chk) check="$2";;
@@ -32,6 +33,11 @@ fi
 if ! [ -z "${neighborhood_residue}" ]
 then
  neighborhood_residue="-nbh ${neighborhood_residue}"
+fi
+
+if ! [ -z "${membrane}" ]
+then
+ membrane="-memb -mspan ${membrane}"
 fi
 
 if ! [ -z "${ind_type}" ]
@@ -65,13 +71,13 @@ else
 fi
 
 total_variants=$(expr `grep -o ">" ${mutant_list} | wc -l` - 1)
-srun -J split_${mutant_list:0:-4} -p ${partition} -t 20:00 python3 ../scripts/split_fasta_version4.py -i ${mutant_list} -n ${total_jobs} -t ${template_pdb} ${check}
+srun -J split_${mutant_list:0:-4} -p ${partition} -t 20:00 python3 ../scripts/split_fasta.py -i ${mutant_list} -n ${total_jobs} -t ${template_pdb} ${check}
 
 prefix=${template_pdb%%"_"*}
 
 for job_idx in $(seq 1 ${total_jobs})
 do
- slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now --command "python3 ../scripts/make_site_mutated_protease_v5.py -t ${template_pdb} -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${ind_type} ${debugging_mode}"
+ slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${membrane} ${ind_type} ${debugging_mode}"
  sleep 0.1
 done
 
