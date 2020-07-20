@@ -79,7 +79,7 @@ then
   python ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
    -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} \
    ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${only_protein} \
-   ${cut_region_by_chains} ${membrane} ${ind_type} ${debugging_mode} &
+   ${membrane} ${ind_type} ${debugging_mode} &
  done
 
  while ! [ ${completed_jobs} == 24 ]
@@ -97,8 +97,9 @@ then
  done
 else
  python ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-  -m ${mutant_list} -rn ${prefix} ${symmertry} ${ex_rotamers} \
-  ${neighborhood_residue} ${only_protein} ${membrane} ${ind_type} ${debugging_mode}
+  -m ${mutant_list} ${cut_region_by_chains} -rn ${prefix} ${symmertry} \
+  ${ex_rotamers} ${neighborhood_residue} ${only_protein} ${membrane} \
+  ${ind_type} ${debugging_mode}
 fi
 
 exit
