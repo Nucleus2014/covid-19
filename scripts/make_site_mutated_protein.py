@@ -289,14 +289,17 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by): #ind_by has 
     hyphen_list = find(new_seq_1, "-")
     seq_2_for_model = ''.join([new_seq_2[sel] for sel in range(len(new_seq_2)) if sel not in hyphen_list])        
     seq_1_for_model = new_seq_1.replace("-","")
-
+    print("\n")
+    print(seq_2_for_model)
+    print(seq_1_for_model)
     hyphen_list2 = find(seq_2_for_model, "-")
     if len(hyphen_list2) != 0:
         for xx in hyphen_list2:
-            seq_2_for_model[xx] = seq_1_for_model[xx]
+            seq_2_for_model = seq_2_for_model[0:xx] + seq_1_for_model[xx] + seq_2_for_model[xx+1:]
+    print(len(seq_2_for_model))
+    print(len(seq_1_for_model))
 
     assert len(seq_1_for_model) == len(seq_2_for_model)
-
     # Identify altered sites
     for n, i in enumerate(new_seq_2):
         if i != query_seq_aligned[n]:
@@ -412,7 +415,7 @@ def identify_res_layer(pose, res_number, main_chain=1):
     surface layer of the protein.
     """
     # If the PDB has multiple chains, isolate main
-    check_pose = pose.split_by_chain()[main_chain]
+    check_pose = pr.Pose(pose, pose.chain_begin(main_chain), pose.chain_begin(main_chain))
     
     # Identify layer with LayerSelector
     layer_selector = LayerSelector()
@@ -999,7 +1002,8 @@ def cut_by_chain(wild_pose, cut, list_fasta_names):
     wild_seqs = {}
     tmp_pose = wild_pose.clone()
     remove_nonprotein_residues(tmp_pose)
-    if len(list_fasta_names) > 1:
+    #if len(list_fasta_name) > 1:
+    if cut != None:
         cut = cut.strip().split(",")
         chain_seqs = seq_length_by_chain(wild_pose)
         try:
@@ -1121,13 +1125,12 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
             mut_tags['rmsd'] = 'NA'
 
         # Set future calculations to use the mutated pose
-        pose = mutated_pose
+        pose = mutated_pose.clone()
     else:
         mutated_pose = None
-        pose = ref_pose
-
+        pose = ref_pose.clone()
     # Add substitution layer to output data
-    layers = [identify_res_layer(pose, pm[0], main_chain=main_chain) 
+    layers = [identify_res_layer(pose, pm[0], main_chain=list(fa_ind.values())[0]+1) 
         for pm in new_subs]
     mut_tags['layer'] = ';'.join(layers)
 
