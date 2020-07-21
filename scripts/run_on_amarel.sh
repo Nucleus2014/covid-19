@@ -76,19 +76,19 @@ then
  workload=15
 fi
 
-if [ -z "${fast_relax}" ]
-then
- total_jobs=$((${total_variants} / ${workload} + 1))
-else
- total_jobs=$((${total_variants} * ${fast_relax} / ${workload} + 1))
- fast_relax="-fr ${fast_relax}"
-fi
-
 prefix=${template_pdb%%"_"*}
 
 if [ -z "${cut_region_by_chains}" ]
 then
  total_variants=$(expr `grep -o ">" ${mutant_list} | wc -l` - 1)
+ if [ -z "${fast_relax}" ]
+ then
+  total_jobs=$((${total_variants} / ${workload} + 1))
+ else
+  total_jobs=$((${total_variants} * ${fast_relax} / ${workload} + 1))
+  fast_relax="-fr ${fast_relax}"
+ fi
+
  srun -J split_${mutant_list:0:-4} -p ${partition} -t 20:00 \
   python3 ../scripts/split_fasta.py -i ${mutant_list} -n ${total_jobs} \
   -t ${template_pdb} ${check}
@@ -103,7 +103,12 @@ then
   sleep 0.1
  done
 else
- slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now \
+ if ! [ -z "${fast_relax}" ]
+ then
+  fast_relax="-fr ${fast_relax}"
+ fi
+
+ slurmit.py --job ${prefix} --partition ${partition} --begin now \
    --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
    -m ${mutant_list} ${cut_region_by_chains} -rn ${prefix} ${symmertry} \
    ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${only_protein} \
