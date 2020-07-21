@@ -76,11 +76,6 @@ then
  workload=15
 fi
 
-if ! [ -z "${fast_relax}" ]
-then
- fast_relax="-fr ${fast_relax}"
-fi
-
 prefix=${template_pdb%%"_"*}
 
 if [ -z "${cut_region_by_chains}" ]
@@ -91,6 +86,7 @@ then
   total_jobs=$((${total_variants} / ${workload} + 1))
  else
   total_jobs=$((${total_variants} * ${fast_relax} / ${workload} + 1))
+  fast_relax="-fr ${fast_relax}"
  fi
 
  srun -J split_${mutant_list:0:-4} -p ${partition} -t 20:00 \
@@ -107,6 +103,11 @@ then
   sleep 0.1
  done
 else
+ if ! [ -z "${fast_relax}" ]
+ then
+  fast_relax="-fr ${fast_relax}"
+ fi
+
  slurmit.py --job ${prefix} --partition ${partition} --begin now \
    --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
    -m ${mutant_list} ${cut_region_by_chains} -rn ${prefix} ${symmertry} \
