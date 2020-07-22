@@ -70,7 +70,7 @@ fi
 
 prefix=${template_pdb%%"_"*}
 
-if [ -z "${cut_region_by_chains}" ]
+if [ -z "${cut_region_by_chains}" ] || [ ${#cut_region_by_chains} == 6 ]
 then
  python ../scripts/split_fasta.py -i ${mutant_list} -t ${template_pdb} -n 12 ${check}
 
