@@ -81,6 +81,9 @@ def main(args):
 		sf.set_weight(st.angle_constraint, args.enzdes_wt)
 		sf.set_weight(st.dihedral_constraint, args.enzdes_wt)
 
+	# Loading PDB file
+	pose = pose_from_pdb(args.pdb_file)
+
 	# Creating FastRelax protocol with the given score function
 	fr = FastRelax()
 	fr.set_scorefxn(sf)
@@ -97,6 +100,12 @@ def main(args):
 	tf.push_back(OperateOnResidueSubset(prevent, protein_selector, True))
 	fr.set_task_factory(tf)
 
+	move_map = MoveMap()
+	move_map.set_bb(True)
+	protein_res_true_vector = protein_selector.apply(pose)
+	move_map.set_chi(protein_res_true_vector)
+	fr.set_movemap(move_map)
+
 	# Determining file name
 	if args.name: 
 		file_name = args.name
@@ -105,8 +114,8 @@ def main(args):
 
 	out_name = join(dir_name, file_name)
 
-	# Loading PDB file, applying constraints
-	pose = pose_from_pdb(args.pdb_file)
+	# Applying constraints
+	
 	ac.apply(pose)
 	if args.constraints:
 		enz_cst.apply(pose)
@@ -138,5 +147,3 @@ if __name__ == '__main__':
 	init(opts)
 	
 	main(args)
-
-# '-relax:constrain_relax_to_start_coords -relax:coord_constrain_sidechains'
