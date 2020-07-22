@@ -78,7 +78,7 @@ fi
 
 prefix=${template_pdb%%"_"*}
 
-if [ -z "${cut_region_by_chains}" ]
+if [ -z "${cut_region_by_chains}" ] || [ ${#cut_region_by_chains} == 6 ]
 then
  total_variants=$(expr `grep -o ">" ${mutant_list} | wc -l` - 1)
  if [ -z "${fast_relax}" ]
