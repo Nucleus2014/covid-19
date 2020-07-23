@@ -597,5 +597,236 @@ So if you add **“|NSP3_PL_PRO”** after the tag of sequence, the problem shou
 
 Hi everyone, thanks to Changpeng's effort, the split_fasta_v4.py script works well now. She also remided me that I shouldn't use the --check flag while running the spliting script. So I updated both the shell script to run4.1.sh. You can download both the scripts from google drive.
 
+# 2020-07-16 Main Script Debugs Summary
+
+**Reported by**: Vidur Sarma
+
+As we had discussed in the group meeting, the spike-Ace2 complex has a whole chain more than the fasta sequence i.e. the input structure has about 375 residues more than in the fasta sequence. 
+
+I applied the latest version of your script i.e. make_site_mutated_protease_v5.py and the latest auxiliary script for splitting the fasta files, along with Zhuofan’s run_v4.1.sh. The script runs but as one might expect, it turned up the following error. I couldn’t find the same error in the log sheet you had prepared.
+
+```bash
+ERROR: Assertion `seq_x->ungapped_length() == seq_x->length()` failed.
+
+ERROR:: Exit from: /home/benchmark/rosetta/source/src/core/sequence/Aligner.cc line: 50
+
+Traceback (most recent call last):
+
+ File "../scripts/make_site_mutated_protease_v5.py", line 1032, in <module>
+
+  main(args)
+
+ File "../scripts/make_site_mutated_protease_v5.py", line 976, in main
+
+  ind_type = args.ind_type, pdb_name = args.template_pdb)
+
+ File "../scripts/make_site_mutated_protease_v5.py", line 858, in analyze_mutant_protein
+
+  substitutions, new_subs = compare_sequences(pdb_name, seqrecord.seq, query, ind_type)
+
+ File "../scripts/make_site_mutated_protease_v5.py", line 218, in compare_sequences
+
+  tmpAlign = SWAligner().align(wild_seq_, seq_2_, ss)
+
+RuntimeError:
+
+ 
+
+File: /home/benchmark/rosetta/source/src/core/sequence/Aligner.cc:50
+
+[ ERROR ] UtilityExitException
+
+ERROR: Assertion `seq_x->ungapped_length() == seq_x->length()` failed.
+```
+
+ 
+
+The command I used was : `bash ../scripts/run_v4.1.sh -tp 6m17_chainB_chainE_v3.pdb_relaxed_spikeinterfacev2_11_1.pdb -ml S-protein_GISAID.fasta.txt -ex true -nbh 8.0 -debug true -chk true`
 
 
+
+**Reported by**: Changpeng Lu
+
+> 1. For getting mutation results for complex state, I am wondering if we need to do several mutations at a time for each monomer when reference protein we aligned with has mutations in two or three FASTA files.
+>
+> For example, I am doing with 7bv2, which is a hetrotrimer, and hCoV-19/South_Africa/R05475/2020 | hCoV-19/South_Africa/R05475/2020 reference sequence appears in both Nsp7_GISAID and Nsp8_GISAID. Say if mutation in Nsp7_GISAID for this reference is A123B, while mutation in Nsp8_GISAID for this reference is B234C, should these two mutations be done simultaneously and finally get the mutated Rosetta model that has these two mutations?
+>
+> ​        Here are replicates in different FASTA files for Nsp7, Nsp8, Nsp12.
+>
+> ​                
+>
+> |      | ID 1                             | ID 2                             | in FASTA       |
+> | ---- | -------------------------------- | -------------------------------- | -------------- |
+> | 1    | hCoV-19/South_Africa/R05475/2020 | hCoV-19/South_Africa/R05475/2020 | Nsp7 and Nsp8  |
+> | 2    | hCoV-19/USA/WA-S914/2020         | hCoV-19/USA/WA-S914/2020         | Nsp7 and Nsp8  |
+> | 3    | hCoV-19/USA/WA-S1116/2020        | 'hCoV-19/USA/WA-S1116/2020       | Nsp7 and Nsp12 |
+> | 4    | hCoV-19/India/S10/2020           | hCoV-19/India/S10/2020           | Nsp8 and Nsp12 |
+> | 5    | hCoV-19/USA/NY-NYUMC629/2020     | hCoV-19/USA/NY-NYUMC629/2020     | Nsp8 and Nsp12 |
+
+**Note: All errors could be avoided if using the new script released by Changpeng on July 19th.**
+
+
+
+## 2020-07-18 Main Script Updated
+
+**Updated by**: Zhuofan
+
+ I modified the py script so that it will only repack protein residues while hold ligand and RNA motifs fixed using the --only_protein flag. We are now using the same setting to relax the input pdbs.
+
+## 2020-07-19 Main Script New Version Released
+
+**Released by**: Changpeng Lu
+
+**Script Name**: protease_v1.py (later renamed to *make_site_mutated_protein.py*)
+
+Here is a big update for mutation script, named as **“protease_v1.py”.** Now it can handle:
+
+1. Both single multiple FASTA files and multiple FASTA files;
+
+2. In the multiple FASTA case, it could identify the monomer that is corresponded to the specific FASTA files and make mutations for it in complex state;
+
+3. If the reference protein appears in different FASTA files, it will do all mutations read from different FASTA files and make mutations on corresponding monomers, simultaneously;
+
+4. Thanks to Zhuofan, it could handle non-protein part. The basic idea is to make it not moved during repacking.
+
+The command is a little different. Here are several commands with different cases:
+
+1. Multiple FASTA files:
+
+Check out which chains correspond to which FASTA files and use the command like below:
+
+
+
+`python make_site_mutated_protease_v5.2.py -t nsp7-nsp8-nsp12_F101A.pdb -m Nsp12_GISAID.fasta.txt, Nsp8_GISAID.fasta.txt,Nsp7_GISAID.fasta.txt -nbh 8.0 -rn test_fast -op -cut "A,B,C" -rn 7bv2_fast`
+
+
+
+Here, several new flags are described below:
+
+1) **“-m”** contains all FASTA input files. Use **“,”** **(comma**) to separate them. Make sure not to contain any **space** among them;
+
+2) **“-op”** means avoiding nonprotein residues moving during repacking and minimization;
+
+3) **“-cut”** records the corresponded chain name for each FASTA file. List corresponded chain name and use “,” to separate them. Here, Nsp12 is mapped to Chain A, Nsp8 is mapped to Chain B, Nsp7 is mapped to Chain C. Make sure “-m” and “-cut” flag can map to each other;
+
+
+
+2. Single FASTA file:
+
+Command as before:
+
+`  python make_site_mutated_protease_v5.2.py -t nsp7.pdb -m Nsp7_GISAID.fasta.txt -nbh 8.0 -rn test_fast`
+
+**Update about the output:**
+
+​        Since now we need to consider different chains and indices for sequences of chains are not consecutive, I modified the way to show substitutions and mutations as followed:
+
+1) In “mutants.csv”, if “CK7N” in substitutions, it means for chain C, residue 7 is mutated from K in the wild type to N in the reference;
+
+2) In “substitutions.csv”, add a new column “chain” to record the chain name.
+
+Codes have been uploaded to all drive folders, github and attach in this email. Also a small example has been run on 7bv2 and its outputs are attached as well. I am not sure if the updated script could solve Lingjun and Vidur’s problem, but I am wondering if you could run this script for me on your own protein and report errors to me. 
+
+## 2020-07-19 Main Script Debug Fixed
+
+**Reported by**: Lingjun
+
+```bash
+ERROR: Error in core::conformation::Conformation::residue(): The sequence position requested was greater than the number of residues in the pose.
+ERROR:: Exit from: /scratch/benchmark/W.hojo-2/rosetta.Hojo-2/_commits_/main/source/build/PyRosetta/linux/clang-3.4.2/python-3.5/release/source/src/core/conformation/Conformation.hh line: 508
+Traceback (most recent call last):
+  File "protease_v1.py", line 1275, in <module>
+    main(args)
+  File "protease_v1.py", line 1219, in main
+    only_protein=args.only_protein)
+  File "protease_v1.py", line 1109, in analyze_mutant_protein
+    for pm in new_subs]
+  File "protease_v1.py", line 1109, in <listcomp>
+    for pm in new_subs]
+  File "protease_v1.py", line 409, in identify_res_layer
+    check_pose = pose.split_by_chain()[main_chain]
+RuntimeError: 
+
+File: /scratch/benchmark/W.hojo-2/rosetta.Hojo-2/_commits_/main/source/build/PyRosetta/linux/clang-3.4.2/python-3.5/release/source/src/core/conformation/Conformation.hh:508
+[ ERROR ] UtilityExitException
+ERROR: Error in core::conformation::Conformation::residue(): The sequence position requested was greater than the number of residues in the pose.
+```
+
+The command used below:
+
+`python protease_v1.py -t 6vxx_INPUT.pdb -sym 6vxx.symm -m S-protein_GISAID.fasta.test.txt -nbh 8.0 -rn test_fast`
+
+**Fixed by**: Changpeng Lu
+
+1. For 6vxx, Elliott has done mutations and is relaxing on Amarel. I found the bug from the script is basically on split_by_chain(), that cannot handle symmetrized pose well. So I asked Joey and used an alternative way. Now it worked well for 6vxx case. Once input files are ready, we could get results asap;
+
+## 2020-07-19 Main Script Updated
+
+**Updated by**: Elliott Dolan
+
+The protease_v1.py script is updated to accommodate asymmetric and symmetric membrane proteins. Changpeng is still working on her portion – I have pushed my portion of the code to her repository. When she finishes with her portion, her protease_v1.py upload should contain my modifications. If it doesn’t, I can update it by hand quickly. 
+
+To begin using membrane proteins, add the flag “-memb” or “- - membrane” to declare the protein as a membrane protein. There is nothing intrinsic to a membrane protein pdb file over a soluble protein pdb file, so this argument must be cast.
+
+​        All membrane proteins require a span file, and if you call the membrane protein argument, you must also pass the ‘-mspan’ or ‘—span_file’ argument along with the appropriate span file (it will break if you call -memb without -mspan). If the wrong span file is included, the script will not act properly – it may still run, however. The remainder of the script works well and gives me appropriate .csv outputs.
+
+Additionally, everything for the membrane proteins are uploaded to the CV datafiles folder.
+
+Zhoufan – If you could add something into the run script for membrane proteins, that’d be fantastic. Should be something like this:
+
+Should be callable with `-mem SPAN_FILE`  --- so the -mem flag followed by the span file name
+
+In the case portion of your script:
+
+​       ` -mem) membrane=”$2”;;`
+
+Afterwards:
+
+```bash
+If ! [ -z “${membrane}” ]
+
+Then
+
+   Membrane=”-memb -mspan “${membrane}
+
+Fi
+```
+
+Finally, just add `${membrane}` onto the python tags for the python script.
+
+Changpeng - The membrane input files have membrane identifying residues, but they don’t seem to throw errors in terms of the pyrosetta alignment code. 
+
+I’ll be around tomorrow to fix things if there are any issues. Hit me up on the slack
+
+## 2020-07-20 Input Data Updated
+
+**Reported by**: Changpeng Lu
+
+> After talking with Zhuofan and Elliott, we found that pdb sequence is not equivalent with the aligned part of wild type sequence in the FASTA file, at least for 6vxx. When we aligned the pdb with the wild type, there are extra mutations except gaps. I am afraid it happens for more proteins that we have done before. In this case, Elliott thought and we agreed the best way to do in the first place is to mutate the pdb with the wild type before relaxing and THEN try to relax and do mutation with those reference proteins in the FASTA. What do you think?
+
+**Updated by**: Elliott Dolan
+
+1. For 6vxx, Elliott has done mutations and is relaxing on Amarel. I found the bug from the script is basically on split_by_chain(), that cannot handle symmetrized pose well. So I asked Joey and used an alternative way. Now it worked well for 6vxx case. Once input files are ready, we could get results asap;
+
+## 2020-07-21 Main Script Debug 
+
+**Reported by**: Changpeng
+
+For 6VSB, the alignment function in Pyrosetta is not a good one. It cannot handle sequences that have many gaps there.
+
+For 6YYT, I got the sense for FASTA files. 
+
+And the script is well running by doubling nsp8 FASTA file in the command below:
+
+`python make_site_mutated_protein.py -t 6yyt.pdb -m Nsp12_GISAID.fasta.txt,Nsp8_GISAID.fasta.txt,Nsp7_GISAID.fasta.txt,Nsp8_GISAID.fasta.txt -nbh 8.0 -op -cut "A,B,C,D" -rn 6yyt_fast`
+
+## 2020-07-21 *Summary of commands for Main Script For Now
+
+**Summarized by**: Changpeng Lu
+
+*  Mutations on a Asymmetric protein with the same sequences for several chains
+  * Example: 6VSB
+  * Input files: 
+    * 6VSB_relaxed.pdb
+    * FASTA file
+    * 
