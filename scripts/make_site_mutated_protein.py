@@ -136,6 +136,9 @@ def parse_args():
     parser.add_argument('-cut', '--cut_region_by_chains', type=str, default=None, \
         help='if multiple fasta files input, cut regions are needed to be defined \
         in the same order of fasta files order. example: "A,C,B"')
+    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', \
+        help = 'if pdb index matches mutant index, then set this flag to avoid pairwise \
+        alignment which costs much time and not so accurate')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
@@ -199,7 +202,7 @@ def read_name_tag(fasta_id):
     return tag_dict
 
 
-def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by): #ind_by has two option, pose or pdb
+def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_match_mutant): #ind_by has two option, pose or pdb
     """
     Given a reference sequence and a comparison sequence, identify the sites 
     where the comparison sequence differs from the reference. Returns a list of 
@@ -222,6 +225,7 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by): #ind_by has 
     elif ind_by == "pose":
         start_ind = 1
     print("Start index in the pdb sequence is:{}".format(start_ind))
+
     # added by Changpeng, do sequence alignment between pdb seq and ref seq
     wild_seq = list(pdb_seq.values())[0][0] #one chain that matched to fasta,pdb_seq[1] is the start_ind in the wild_pose
     wild_seq_ = Sequence(wild_seq,"pdb")
@@ -243,6 +247,29 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by): #ind_by has 
     new_seq_1 = tmpAlign.to_string().strip().split("\n ")[1].strip().split(" ")[-1].replace("\n", "")
     new_seq_2 = tmpAlign.to_string().strip().split("\n ")[2].strip().split(" ")[-1].replace("\n", "")
     query_seq_aligned = tmpAlign1.to_string().strip().split("\n")[2].strip().split(" ")[-1].replace("\n","")
+
+    if is_pdb_index_match_mutant:
+        align_ind_1 = 1
+        align_ind_2 = start_ind_chain_in_pose
+        new_seq_1 = ""
+    #    new_seq_2 = seq_2[start_ind_chain_in_pose-1:]
+        print(len(wild_seq))
+        fp = open(pdb_name,"r")
+        j = 0
+        n = 0
+        for line in fp:
+            if line[0:6].strip() == "ATOM":
+                if line[21] == list(pdb_seq.keys())[0]:
+                    if int(line[22:26].strip()) > n:
+                        if int(line[22:26].strip()) != n + 1:
+                            new_seq_1 += "-" * (int(line[22:26].strip()) - n - 1)
+                        new_seq_1 += wild_seq[j]
+                        j += 1
+                        n = int(line[22:26].strip())
+        new_seq_1 = new_seq_1.lstrip("-")
+        new_seq_2 = seq_2[start_ind-1: n] + "--"
+        query_seq_aligned = str(query_seq.seq).strip("-")[start_ind-1: n] + "--"
+
     site_changes = []
 
     # N-terminal has truncations or additions in fasta
@@ -1037,7 +1064,7 @@ def replicate_seqs(replicates, analyze_lists):
  
 def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, ind_type, main_chain=1,  
     make_model=True, ex12=True, oligo_chains=None, cat_res=None, substrate_chains=None,
-    cut_order = None, rep_fa_ind = None, replicate_id1 = None,
+    cut_order = None, rep_fa_ind = None, replicate_id1 = None, pdb_index_match_mutant = False,
     repacking_range=False, relax_decoys=False, only_protein=False, debugging_mode=False):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
@@ -1075,7 +1102,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     print("Chain is:{}".format(list(fa_ind.keys())[0]))
     print("This is the {}th FASTA file!".format(list(fa_ind.values())[0]))
     substitutions, new_subs = compare_sequences(pdb_name, {list(fa_ind.keys())[0] : pdb_seq[list(fa_ind.keys())[0]]}, seqrecord.seq, 
-        query[list(fa_ind.values())[0]], ind_type)
+        query[list(fa_ind.values())[0]], ind_type, pdb_index_match_mutant)
 
     # replicates processing
     if replicate_id1 != None:
@@ -1088,7 +1115,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
                print("Chain is:{}".format(cut_order[fa_inds[ff]]))
                print("This is the {}th FASTA file!".format(fa_inds[ff]))
                res_substitutions, res_new_subs = compare_sequences(pdb_name, {cut_order[fa_inds[ff]]: pdb_seq[cut_order[fa_inds[ff]]]}, \
-                    rest.seq, query[fa_inds[ff]], ind_type)
+                    rest.seq, query[fa_inds[ff]], ind_type,pdb_index_match_mutant)
                substitutions += res_substitutions
                new_subs += res_new_subs
             replicate_id1.pop(mut_tags['id_1']) 
@@ -1254,7 +1281,7 @@ def main(args):
                 substrate_chains=args.ligand_chain,
                 repacking_range=args.neighborhood_residue,
                 relax_decoys=args.fast_relax, debugging_mode=args.debugging_mode,
-                ind_type = args.ind_type, cut_order = cut, rep_fa_ind = replicates, replicate_id1 = replicate_inds, 
+                ind_type = args.ind_type, cut_order = cut, rep_fa_ind = replicates, replicate_id1 = replicate_inds, pdb_index_match_mutant = args.is_pdb_index_match_mutant, 
                 only_protein=args.only_protein)
 
             # Display results for this mutant

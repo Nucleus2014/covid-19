@@ -78,7 +78,7 @@ fi
 
 prefix=${template_pdb%%"_"*}
 
-if [ -z "${cut_region_by_chains}" ]
+if if [ -z "${cut_region_by_chains}" ] || ! [[ "${cut_region_by_chains}" == *","* ]]
 then
  total_variants=$(expr `grep -o ">" ${mutant_list} | wc -l` - 1)
  if [ -z "${fast_relax}" ]
@@ -95,7 +95,7 @@ then
 
  for job_idx in $(seq 1 ${total_jobs})
  do
-  slurmit.py --job ${prefix}_job${i} --partition ${partition} --begin now \
+  slurmit.py --job ${prefix}_job${job_idx} --partition ${partition} --begin now \
    --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
    -m ${mutant_list}_${template_pdb:0:-4}.${job_idx}.txt -rn ${prefix}_part${job_idx} \
    ${symmertry} ${ex_rotamers} ${neighborhood_residue} ${fast_relax} ${only_protein} \
