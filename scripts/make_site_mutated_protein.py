@@ -1182,11 +1182,28 @@ def main(args):
     if args.symmetry:
         sf = SymmetricScoreFunction()
         sf.add_weights_from_file(base_sf)
+        
+    # the franklin2019 score function does not have constraint
+    # constraint weights incorporated in the score function.
+    #   This adds the requisite constraint weights.
+        if args.membrane and args.constrain:
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.chainbreak, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.coordinate_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.atom_pair_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.angle_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.dihedral_constraint, 1.0)
 
         sfsm = SetupForSymmetryMover(args.symmetry)
         sfsm.apply(wild_pose)
     else:
         sf = pr.create_score_function(base_sf)
+        #Adds constraint weights to franklin2019
+        if args.membrane and args.constrain:
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.chainbreak, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.coordinate_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.atom_pair_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.angle_constraint, 1.0)
+            sf.set_weight(pr.rosetta.core.scoring.ScoreType.dihedral_constraint, 1.0)
     
     #Set up membrane for membrane protein
     if args.membrane:
