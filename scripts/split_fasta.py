@@ -118,7 +118,7 @@ else:
 for ind in range(n_splits):
 	if args.check == False:
 		que_out = query_value
-	gp = open(args.input + "." + str(ind+1) + ".txt", "w")
+	gp = open(args.input[:-4] + "_" + str(ind+1) + ".txt", "w")
 	gp.write(query_name + "\n")
 	seq_split_batch = math.floor(len(que_out) / 60)
 	for batch in range(seq_split_batch):
@@ -168,7 +168,7 @@ for ind in range(n_splits):
 	gp.close()
 
 if args.check == True:
-	cp = open(args.input + ".modified.txt", "w")
+	cp = open(args.input[:-4] + "_modified.txt", "w")
 	cp.write(query_name + "\n")
 	seq_split_batch = math.floor(len(que_out) / 60)
 	for batch in range(seq_split_batch):
