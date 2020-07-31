@@ -97,6 +97,9 @@ def parse_args():
         will be generated.')
     parser.add_argument('-m', '--mutants_list', type=str, nargs='*', required=True, 
         help='Input a fasta list file or files identifying the mutations.')
+    parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
+        help='if multiple fasta files input, cut regions are needed to be defined \
+        in the same order of fasta files order. example: "A,C,B"')
     parser.add_argument('-od', '--out_dir', type=str, 
         help='Input a directory into which the homolog models will be saved. \
         If not specified, PDBs will be saved in the current directory.')
@@ -104,29 +107,27 @@ def parse_args():
         help='Input a name for the substitutions report. \
         If not specified, the report will be called substitutions_summary.csv \
         and be saved in the current directory.')
+    parser.add_argument('-params', '--params', type=str, nargs='+', 
+        default=None, help='If a non-canonical residue/ligand is present, \
+        provide a params file.')
     parser.add_argument('-mc', '--main_chain', type=int, default=1, 
         help='The main chain being analyzed is 1 by default. Specify main \
         chain if not 1.')
     parser.add_argument('-ic', '--interface_chain', type=int, nargs='+', 
         default=None, help='If symmetry is used, specify the oligomeric chains.')
-    parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
-        choices=['soft', 'hard'], help='Using the normal hard-rep or the \
-        soft-rep score function for repacking and minimization, respectively.')
-    parser.add_argument('-bb', '--backbone', type=bool, default=True, 
-        help='Whether the backbone is optimized in minimization.')
-    parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
-        help='Giving a flag of -nbh will also allow surrounding residues \
-            within [nbh] angstroms of the mutated residue to repack.')
-    parser.add_argument('-r', '--rounds', type=int, default=1, 
-        help='Conduct how many rounds of repacking and minimization.')
-    parser.add_argument('-fr', '--fast_relax', type=int, default=None, 
-        help='Giving a flag of -fr will employ fast relax protocol on the \
-            whole protein instead of repacking and minimization, running for \
-            [fr] trajectories.')
     parser.add_argument('-lig', '--ligand_chain', type=int, nargs='+', 
         default=None, help='If a ligand is present, specify ligand chains. If \
         using both symmetry and ligands, specify only ligand chains that are \
         bound to the main chain.')
+    parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
+        default=None, help='The catalytic residues of the enzyme. By default, \
+        no residues are so designated. If residues are specified, report will \
+        include whether substitutions interact with the catalytic residues.')
+    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', \
+        help = 'if pdb index matches mutant index, then set this flag to avoid pairwise \
+        alignment which costs much time and not so accurate')
+    parser.add_argument('-ind', '--ind_type', choices = ['pose', 'pdb'], 
+        default = 'pdb', help='To show mutation residues indices in pdb or in pose order')
     parser.add_argument('-sym', '--symmetry', type=str,
         help='If the pose is symmetric, include a symdef file.')
     parser.add_argument('-memb', '--membrane', required=False, action='store_true',
@@ -134,19 +135,22 @@ def parse_args():
     parser.add_argument('-mspan', '--span_file', 
         required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
-    parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
-        default=None, help='The catalytic residues of the enzyme. By default, \
-        no residues are so designated. If residues are specified, report will \
-        include whether substitutions interact with the catalytic residues.')
-    parser.add_argument('-params', '--params', type=str, nargs='+', 
-        default=None, help='If a non-canonical residue/ligand is present, \
-        provide a params file.')
-    parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
-        help='if multiple fasta files input, cut regions are needed to be defined \
-        in the same order of fasta files order. example: "A,C,B"')
-    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', \
-        help = 'if pdb index matches mutant index, then set this flag to avoid pairwise \
-        alignment which costs much time and not so accurate')
+    parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
+        choices=['soft', 'hard'], help='Using the normal hard-rep or the \
+        soft-rep score function for repacking and minimization, respectively.')
+    parser.add_argument('-op', '--only_protein', action='store_true', 
+        help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
+    parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
+        help='Giving a flag of -nbh will also allow surrounding residues \
+            within [nbh] angstroms of the mutated residue to repack.')
+    parser.add_argument('-fix_bb', '--backbone', action='store_false', 
+        help='Whether the backbone is optimized in minimization.')
+    parser.add_argument('-r', '--rounds', type=int, default=1, 
+        help='Conduct how many rounds of repacking and minimization.')
+    parser.add_argument('-fr', '--fast_relax', type=int, default=None, 
+        help='Giving a flag of -fr will employ fast relax protocol on the \
+            whole protein instead of repacking and minimization, running for \
+            [fr] trajectories.')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
@@ -162,10 +166,6 @@ def parse_args():
         The first is the number of partitions, the second is which partition \
         member to run on this processor, from 1 to the number of partitions. \
         not working for now.')
-    parser.add_argument('-ind', '--ind_type', choices = ['pose', 'pdb'], 
-        default = 'pdb', help='To show mutation residues indices in pdb or in pose order')
-    parser.add_argument('-op', '--only_protein', action='store_true', 
-        help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
     parser.add_argument('-debug', '--debugging_mode', action='store_true', 
         help='Giving a flag of -debug, it will print out the task operations on \
         all residues, namely point mutations, repacking or keeping static.')
@@ -796,7 +796,7 @@ def repacking_with_muts_and_minimization(pose, task_factory, move_map,
     min_mover.movemap(move_map)
 
     for i in range(rounds):
-        if prm:
+        if task_factory:
             # Apply the PackRotamersMover
             prm.apply(mutated_pose)
         # Apply the MinMover to the modified Pose
@@ -1222,7 +1222,7 @@ def main(args):
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
     if args.repulsive_type:
-        if args.fr:
+        if args.fast_relax:
             args.repulsive_type = None
         else:
             opts += ' -beta'
@@ -1329,7 +1329,7 @@ def main(args):
     print(pdb_seqs)
 
     if not args.cut_region_by_chains:
-        cut = list(pdb_seqs.keys())[0]
+        args.cut_region_by_chains = list(pdb_seqs.keys())[0]
 
     # Iterate through all identified fasta sequences, altering protease model
     all_mutants_info = pd.DataFrame([])
@@ -1337,12 +1337,12 @@ def main(args):
     for c in range(len(args.mutants_list)):
         for n, mutant in enumerate(analyze_lists[c]):
             single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds = \
-            analyze_mutant_protein(mutant, wild_pose, sf, wts, pdb_seqs, {cut[c]: c},
-                pdb_name=args.template_pdb, make_model=args.make_models, 
+                analyze_mutant_protein(mutant, wild_pose, sf, wts, pdb_seqs, 
+                {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, make_model=args.make_models, 
                 main_chain=args.main_chain, oligo_chains=args.interface_chain, 
                 substrate_chains=args.ligand_chain, cat_res=args.catalytic_residues, 
                 ind_type=args.ind_type, pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
-                cut_order=cut, rep_fa_ind=replicates, replicate_id1=replicate_inds, 
+                cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, replicate_id1=replicate_inds, 
                 ex12=args.extra_rotamers, repacking_range=args.neighborhood_residue, 
                 backbone=args.backbone, only_protein=args.only_protein, rounds=args.rounds, 
                 relax_decoys=args.fast_relax, debugging_mode=args.debugging_mode)
