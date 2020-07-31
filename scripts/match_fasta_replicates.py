@@ -35,7 +35,7 @@ def write_sequences(variant_dict):
             if len(variant) == 1:
                 fasta_name = motif[0] + '_matched.fasta.txt'
             else:
-                fasta_name = motif[0] + '_0.fasta.txt'
+                fasta_name = motif[0] + '_matched_0.fasta.txt'
             with open(fasta_name, 'a+') as p_fasta:
                 p_fasta.writelines(motif[1:])
 
