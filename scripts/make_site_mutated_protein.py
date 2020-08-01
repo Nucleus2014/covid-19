@@ -96,10 +96,13 @@ def parse_args():
         help='Input a starting PDB file for comparison and from which mutants \
         will be generated.')
     parser.add_argument('-m', '--mutants_list', type=str, nargs='*', required=True, 
-        help='Input a fasta list file or files identifying the mutations.')
+        help='Input a .fasta list file or files identifying the mutations. For an \
+        oligomer protein, you may want to give multiple input .fasta files \
+        corresponding to different chains in the pdb model. To do this, use space \
+        to separate different .fasta files.')
     parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
         help='if multiple fasta files input, cut regions are needed to be defined \
-        in the same order of fasta files order. example: "A,C,B"')
+        in the same order of fasta files order. example: "A C B"')
     parser.add_argument('-od', '--out_dir', type=str, 
         help='Input a directory into which the homolog models will be saved. \
         If not specified, PDBs will be saved in the current directory.')
