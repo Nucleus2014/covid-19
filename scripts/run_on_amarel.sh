@@ -100,9 +100,11 @@ then
     mutant_list[$motif_idx]=${mutant_list[$motif_idx]:0:-10}"_matched_0.fasta.txt"
   done
 
+  fastas=$( echo ${mutant_list[*]} )
+  chains=$( echo ${cut_region_by_chains[*]} )
   slurmit.py --job ${protein}_0 --partition ${partition} --begin now \
     --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-    -m ${mutant_list[@]} -cut ${cut_region_by_chains[@]} -rn ${protein}_0 ${ind_type} \
+    -m ${fastas} -cut ${chains} -rn ${protein}_0 ${ind_type} \
     ${symmertry} ${membrane} ${repulsive_type} ${only_protein} ${neighborhood_residue} \
     ${fix_backbone} ${rounds} ${fast_relax} ${debugging_mode}"
   sleep 0.1
@@ -135,7 +137,7 @@ do
     cut_region_by_chains[$motif_idx]="-cut ${cut_region_by_chains[$motif_idx]}"
   fi
 
-  if [ ${#mutant_list[@]} > 1 ]
+  if [ ${#mutant_list[@]} -gt 1 ]
   then
     report_name_prefix=${protein}_${mutant_list[$motif_idx]}
   else
