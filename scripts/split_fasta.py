@@ -118,7 +118,7 @@ else:
 for ind in range(n_splits):
 	if args.check == False:
 		que_out = query_value
-	gp = open(args.input + "_" + args.template_pdb[:-4] + "." + str(ind+1) + ".txt", "w")
+	gp = open(args.input[:-10] + "_" + str(ind+1) + ".fasta.txt", "w")
 	gp.write(query_name + "\n")
 	seq_split_batch = math.floor(len(que_out) / 60)
 	for batch in range(seq_split_batch):
@@ -168,7 +168,7 @@ for ind in range(n_splits):
 	gp.close()
 
 if args.check == True:
-	cp = open(args.input + "_" + args.template_pdb[:-4] + ".modified.txt", "w")
+	cp = open(args.input[:-10] + "_modified.fasta.txt", "w")
 	cp.write(query_name + "\n")
 	seq_split_batch = math.floor(len(que_out) / 60)
 	for batch in range(seq_split_batch):
@@ -190,4 +190,3 @@ if args.check == True:
 		else:
 			cp.write(refs_out[p] + "\n")
 	cp.close()
-
