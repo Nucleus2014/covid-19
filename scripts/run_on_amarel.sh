@@ -124,7 +124,7 @@ do
   then
     total_jobs=$((${total_variants} / ${workload} + 1))
   else
-    total_jobs=$((${total_variants} * ${fast_relax:4:} / ${workload} + 1))
+    total_jobs=$((${total_variants} * ${fast_relax:4} / ${workload} + 1))
   fi
 
   srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
