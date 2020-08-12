@@ -4,7 +4,7 @@
 
 # Usage:
 '''
-	python split_fasta.py -i <fasta-file-name> -n <number of splits, default to 12> --check
+	python split_fasta.py -i <fasta-file-name> -t <template pdb> -n <number of splits, default to 12> --check
 '''
 
 # Initial startup
@@ -12,6 +12,7 @@ import os
 import warnings
 import argparse
 import math
+import numpy as np
 import pyrosetta as pr
 from pyrosetta.rosetta.core.sequence import SWAligner, Sequence, read_fasta_file,\
 SimpleScoringScheme
@@ -35,6 +36,10 @@ filename = args.input
 # functions
 def find(s, ch): # find all characters and return their indices
 	return [i for i, ltr in enumerate(s) if ltr == ch] 
+def split_size(total, n): # determine the number of subject sequences in each file
+	aver = total/n
+	n_comple = round((aver - int(aver)) * n) # files needed to be added more sequences
+	return [int(aver)] * (n-n_comple) + [int(aver)+1] * n_comple
 
 seqs = {}
 fp = open(filename,'r')
@@ -60,12 +65,16 @@ seqs[tag] = seq # save the last one
 fp.close()
 query_value = seqs.pop(query_name)
 keys_list.pop(0)
-split_size = math.ceil(len(seqs) / n_splits)
+#split_size = math.floor(len(seqs) / n_splits)
+split_sizes = split_size(len(seqs), n_splits)
+print(split_sizes)
+assert len(split_sizes) == n_splits
+
 refs_out = [seqs[kk] for kk in keys_list]
 print("-----------------------------------------")
 print("The number of reference sequences are: {}".format(len(keys_list)))
 print("Split into {} pieces".format(n_splits))
-print("Each piece is about to have {} number of reference sequences.".format(split_size))
+print("Each piece is about to have {} number of reference sequences.".format(int(np.mean(split_sizes))))
 
 wild_pose = pr.pose_from_pdb(args.template_pdb)
 wild_seq = wild_pose.chain_sequence(1)
@@ -141,8 +150,9 @@ for ind in range(n_splits):
 			else:
 				gp.write(refs_out[j] + "\n")
 		break
-	if ind < n_splits -1:
-		for k in range(ind * split_size, (ind+1) * split_size):
+	if ind > 0:
+		#for k in range(ind * split_size, (ind+1) * split_size):
+		for k in range(sum(split_sizes[:ind]), sum(split_sizes[:ind+1])):
 			gp.write(keys_list[k] + "\n")
 			seq_split_batch = math.floor(len(refs_out[k]) / 60)
 			for batch in range(seq_split_batch):
@@ -153,18 +163,29 @@ for ind in range(n_splits):
 			else:
 				gp.write(refs_out[k] + "\n")
 	else:
-		remain_keys = keys_list[ind * split_size:]
-		remain_refs = refs_out[ind * split_size:]
-		for q in range(0,len(remain_keys)):
-			gp.write(remain_keys[q] + "\n")
-			seq_split_batch = math.floor(len(remain_refs[q]) / 60)
+		for q in range(0, split_sizes[ind]):
+			gp.write(keys_list[q] + "\n")
+			seq_split_batch = math.floor(len(refs_out[q]) / 60)
 			for batch in range(seq_split_batch):
-				gp.write(remain_refs[q][batch * 60 : (batch + 1) * 60])
-				gp.write("\n")
+				tmp = refs_out[q][batch * 60 : (batch + 1) * 60]
+				gp.write(str(tmp) + "\n")
 			if seq_split_batch != 0:
-				gp.write(remain_refs[q][(batch + 1) * 60 :] + "\n")
+				gp.write(refs_out[q][(batch + 1) * 60 :] + "\n")
 			else:
-				gp.write(remain_refs[q] + "\n")
+				gp.write(refs_out[q] + "\n")
+	#else:
+		#remain_keys = keys_list[ind * split_size:]
+		#remain_refs = refs_out[ind * split_size:]
+		#for q in range(0,len(remain_keys)):
+		#	gp.write(remain_keys[q] + "\n")
+		#	seq_split_batch = math.floor(len(remain_refs[q]) / 60)
+		#	for batch in range(seq_split_batch):
+		#		gp.write(remain_refs[q][batch * 60 : (batch + 1) * 60])
+		#		gp.write("\n")
+		#	if seq_split_batch != 0:
+		#		gp.write(remain_refs[q][(batch + 1) * 60 :] + "\n")
+		#	else:
+		#		gp.write(remain_refs[q] + "\n")
 	gp.close()
 
 if args.check == True:

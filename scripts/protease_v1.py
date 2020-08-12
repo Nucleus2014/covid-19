@@ -43,7 +43,6 @@ from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
     IncludeCurrent, ExtraRotamers, OperateOnResidueSubset, \
     RestrictAbsentCanonicalAASRLT, RestrictToRepackingRLT, PreventRepackingRLT
-from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.select import get_residues_from_subset
 from pyrosetta.rosetta.core.select.residue_selector import AndResidueSelector, \
@@ -95,14 +94,15 @@ def parse_args():
     parser.add_argument('-t', '--template_pdb', type=str, required=True, 
         help='Input a starting PDB file for comparison and from which mutants \
         will be generated.')
-    parser.add_argument('-m', '--mutants_list', type=str, nargs='*', required=True, 
-        help='Input a .fasta list file or files identifying the mutations. For an \
-        oligomer protein, you may want to give multiple input .fasta files \
-        corresponding to different chains in the pdb model. To do this, use space \
-        to separate different .fasta files.')
-    parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
-        help='if multiple fasta files input, cut regions are needed to be defined \
-        in the same order of fasta files order. example: "A C B"')
+    parser.add_argument('-m', '--mutants_list', type=str, required=True, 
+        help='Input a fasta list file or files identifying the mutations.')
+    parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
+        help='Giving a flag of -nbh will also allow surrounding residues \
+            within [nbh] angstroms of the mutated residue to repack.')
+    parser.add_argument('-fr', '--fast_relax', type=int, 
+        help='Giving a flag of -fr will employ fast relax protocol on whole \
+            protein instead of repacking and minimization, running for [fr] \
+            trajectories.')
     parser.add_argument('-od', '--out_dir', type=str, 
         help='Input a directory into which the homolog models will be saved. \
         If not specified, PDBs will be saved in the current directory.')
@@ -110,27 +110,15 @@ def parse_args():
         help='Input a name for the substitutions report. \
         If not specified, the report will be called substitutions_summary.csv \
         and be saved in the current directory.')
-    parser.add_argument('-params', '--params', type=str, nargs='+', 
-        default=None, help='If a non-canonical residue/ligand is present, \
-        provide a params file.')
     parser.add_argument('-mc', '--main_chain', type=int, default=1, 
         help='The main chain being analyzed is 1 by default. Specify main \
         chain if not 1.')
     parser.add_argument('-ic', '--interface_chain', type=int, nargs='+', 
-        default=None, help='If symmetry is used, specify the oligomeric chains.')
+        default=None, help='If symmetry is used, specify the oligomeric chains')
     parser.add_argument('-lig', '--ligand_chain', type=int, nargs='+', 
         default=None, help='If a ligand is present, specify ligand chains. If \
         using both symmetry and ligands, specify only ligand chains that are \
         bound to the main chain.')
-    parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
-        default=None, help='The catalytic residues of the enzyme. By default, \
-        no residues are so designated. If residues are specified, report will \
-        include whether substitutions interact with the catalytic residues.')
-    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', \
-        help = 'if pdb index matches mutant index, then set this flag to avoid pairwise \
-        alignment which costs much time and not so accurate')
-    parser.add_argument('-ind', '--ind_type', choices = ['pose', 'pdb'], 
-        default = 'pdb', help='To show mutation residues indices in pdb or in pose order')
     parser.add_argument('-sym', '--symmetry', type=str,
         help='If the pose is symmetric, include a symdef file.')
     parser.add_argument('-memb', '--membrane', required=False, action='store_true',
@@ -138,22 +126,16 @@ def parse_args():
     parser.add_argument('-mspan', '--span_file', 
         required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
-    parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
-        choices=['soft', 'hard'], help='Using the normal hard-rep or the \
-        soft-rep score function for repacking and minimization, respectively.')
-    parser.add_argument('-op', '--only_protein', action='store_true', 
-        help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
-    parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
-        help='Giving a flag of -nbh will also allow surrounding residues \
-            within [nbh] angstroms of the mutated residue to repack.')
-    parser.add_argument('-fix_bb', '--backbone', action='store_false', 
-        help='Whether the backbone is optimized in minimization.')
-    parser.add_argument('-r', '--rounds', type=int, default=1, 
-        help='Conduct how many rounds of repacking and minimization.')
-    parser.add_argument('-fr', '--fast_relax', type=int, default=None, 
-        help='Giving a flag of -fr will employ fast relax protocol on the \
-            whole protein instead of repacking and minimization, running for \
-            [fr] trajectories.')
+    parser.add_argument('-cr', '--catalytic_residues', type=int, nargs='+', 
+        default=None, help='The catalytic residues of the enzyme. By default, \
+        no residues are so designated. If residues are specified, report will \
+        include whether substitutions interact with the catalytic residues.')
+    parser.add_argument('-params', '--params', type=str, nargs='+', 
+        default=None, help='If a non-canonical residue/ligand is present, \
+        provide a params file.')
+    parser.add_argument('-cut', '--cut_region_by_chains', type=str, default=None, \
+        help='if multiple fasta files input, cut regions are needed to be defined \
+        in the same order of fasta files order. example: "A,C,B"')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
@@ -169,6 +151,10 @@ def parse_args():
         The first is the number of partitions, the second is which partition \
         member to run on this processor, from 1 to the number of partitions. \
         not working for now.')
+    parser.add_argument('-ind', '--ind_type', choices = ['pose', 'pdb'], \
+        default = 'pdb', help='To show mutation residues indices in pdb or in pose order')
+    parser.add_argument('-op', '--only_protein', action='store_true', 
+        help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
     parser.add_argument('-debug', '--debugging_mode', action='store_true', 
         help='Giving a flag of -debug, it will print out the task operations on \
         all residues, namely point mutations, repacking or keeping static.')
@@ -213,7 +199,7 @@ def read_name_tag(fasta_id):
     return tag_dict
 
 
-def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_match_mutant): #ind_by has two option, pose or pdb
+def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by): #ind_by has two option, pose or pdb
     """
     Given a reference sequence and a comparison sequence, identify the sites 
     where the comparison sequence differs from the reference. Returns a list of 
@@ -236,7 +222,6 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
     elif ind_by == "pose":
         start_ind = 1
     print("Start index in the pdb sequence is:{}".format(start_ind))
-
     # added by Changpeng, do sequence alignment between pdb seq and ref seq
     wild_seq = list(pdb_seq.values())[0][0] #one chain that matched to fasta,pdb_seq[1] is the start_ind in the wild_pose
     wild_seq_ = Sequence(wild_seq,"pdb")
@@ -258,29 +243,6 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
     new_seq_1 = tmpAlign.to_string().strip().split("\n ")[1].strip().split(" ")[-1].replace("\n", "")
     new_seq_2 = tmpAlign.to_string().strip().split("\n ")[2].strip().split(" ")[-1].replace("\n", "")
     query_seq_aligned = tmpAlign1.to_string().strip().split("\n")[2].strip().split(" ")[-1].replace("\n","")
-
-    if is_pdb_index_match_mutant:
-        align_ind_1 = 1
-        align_ind_2 = start_ind_chain_in_pose
-        new_seq_1 = ""
-    #    new_seq_2 = seq_2[start_ind_chain_in_pose-1:]
-        print(len(wild_seq))
-        fp = open(pdb_name,"r")
-        j = 0
-        n = 0
-        for line in fp:
-            if line[0:6].strip() == "ATOM":
-                if line[21] == list(pdb_seq.keys())[0]:
-                    if int(line[22:26].strip()) > n:
-                        if int(line[22:26].strip()) != n + 1:
-                            new_seq_1 += "-" * (int(line[22:26].strip()) - n - 1)
-                        new_seq_1 += wild_seq[j]
-                        j += 1
-                        n = int(line[22:26].strip())
-        new_seq_1 = new_seq_1.lstrip("-")
-        new_seq_2 = seq_2[start_ind-1: n] + "--"
-        query_seq_aligned = str(query_seq.seq).strip("-")[start_ind-1: n] + "--"
-
     site_changes = []
 
     # N-terminal has truncations or additions in fasta
@@ -327,17 +289,14 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
     hyphen_list = find(new_seq_1, "-")
     seq_2_for_model = ''.join([new_seq_2[sel] for sel in range(len(new_seq_2)) if sel not in hyphen_list])        
     seq_1_for_model = new_seq_1.replace("-","")
-    print("\n")
-    print(seq_2_for_model)
-    print(seq_1_for_model)
+
     hyphen_list2 = find(seq_2_for_model, "-")
     if len(hyphen_list2) != 0:
         for xx in hyphen_list2:
-            seq_2_for_model = seq_2_for_model[0:xx] + seq_1_for_model[xx] + seq_2_for_model[xx+1:]
-    print(len(seq_2_for_model))
-    print(len(seq_1_for_model))
+            seq_2_for_model[xx] = seq_1_for_model[xx]
 
     assert len(seq_1_for_model) == len(seq_2_for_model)
+
     # Identify altered sites
     for n, i in enumerate(new_seq_2):
         if i != query_seq_aligned[n]:
@@ -453,7 +412,7 @@ def identify_res_layer(pose, res_number, main_chain=1):
     surface layer of the protein.
     """
     # If the PDB has multiple chains, isolate main
-    check_pose = pr.Pose(pose, pose.chain_begin(main_chain), pose.chain_end(main_chain))
+    check_pose = pose.split_by_chain()[main_chain]
     
     # Identify layer with LayerSelector
     layer_selector = LayerSelector()
@@ -749,26 +708,7 @@ def make_point_mutant_task_factory_only_protein(site_changes, ex12=True, \
     return tf
 
 
-def make_move_map(pose, backbone, only_protein):
-    """
-    Generates a movemap for either (Minimization after Repacking) or 
-    (only FastRelax protein scaffold).
-    Written by Zhuofan
-    """
-    move_map = pr.MoveMap()
-    move_map.set_bb(backbone)
-    if only_protein:
-        protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
-        protein_res_true_vector = protein_selection.apply(pose)
-        move_map.set_chi(protein_res_true_vector)
-    else:
-        move_map.set_chi(True)
-    move_map.set_jump(True)
-    return move_map
-
-
-def repacking_with_muts_and_minimization(pose, task_factory, move_map, 
-    score_function, rounds):
+def make_point_changes(pose, task_factory, score_function):
     """
     Applies point mutations to a given pose. This is done through a 
     PackRotamersMover, followed by minimization.
@@ -779,36 +719,34 @@ def repacking_with_muts_and_minimization(pose, task_factory, move_map,
     # Make a copy Pose
     mutated_pose = pr.Pose(pose)
 
-    # Repacking
+    # If there is no mutation (i.e., the reference sequence), just run minimization
     if task_factory:
         # Apply changes with PackRotamersMover
         prm = PackRotamersMover()
-        if type(score_function) is list:
-            prm.score_function(score_function[0])
-        else:
-            prm.score_function(score_function)
+        prm.score_function(score_function)
         prm.task_factory(task_factory)
 
-    # Minimization after repacking
-    # If there is no mutation (i.e., the reference sequence), just run minimization
-    min_mover = MinMover()
-    if type(score_function) is list:
-        min_mover.score_function(score_function[1])
-    else:
-        min_mover.score_function(score_function)
-    min_mover.movemap(move_map)
+        # Apply the PackRotamersMover
+        prm.apply(mutated_pose)
 
-    for i in range(rounds):
-        if task_factory:
-            # Apply the PackRotamersMover
-            prm.apply(mutated_pose)
-        # Apply the MinMover to the modified Pose
-        min_mover.apply(mutated_pose)
+    # Set up fixed-backbone movemap for minimization
+    movemap = pr.MoveMap()
+    movemap.set_bb(True)
+    movemap.set_chi(True)
+    movemap.set_jump(True)
+
+    # Minimize
+    min_mover = MinMover()
+    min_mover.movemap(movemap)
+    min_mover.score_function(score_function)
+
+    # Apply the MinMover to the modified Pose
+    min_mover.apply(mutated_pose)
 
     return mutated_pose
 
 
-def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
+def fast_relax_pose_with_muts(pose, task_factory, score_function, decoys):
     """
     Applies point mutations to a given pose. This is done through a 
     Fast Relax Mover.
@@ -817,8 +755,8 @@ def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
     # Make FastRelax mover
     fast_relax = FastRelax()
     fast_relax.set_scorefxn(score_function)
+    # Set task factory for FastRelax mover
     fast_relax.set_task_factory(task_factory)
-    fast_relax.set_movemap(move_map)
 
     traj_idx = 0
     if_first_decoy = True
@@ -839,9 +777,9 @@ def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
     return mutated_pose
 
 
-def make_mutant_model(ref_pose, substitutions, score_function, ex12=True, 
-    repacking_range=False, backbone=True, rounds=1, relax_decoys=False, 
-    only_protein=False, debugging_mode=False):
+def make_mutant_model(ref_pose, substitutions, score_function, ex12=True, \
+    repacking_range=False, relax_decoys=False, only_protein=False, \
+    debugging_mode=False):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -857,7 +795,8 @@ def make_mutant_model(ref_pose, substitutions, score_function, ex12=True,
 
     Modified by Zhuofan.
     """
-    # Make a task factory to substitute residues and repack
+
+    # Make the task factory to substitute residues and repack
     if len(substitutions) > 0:
         if only_protein:
             tf = make_point_mutant_task_factory_only_protein(substitutions, \
@@ -868,25 +807,16 @@ def make_mutant_model(ref_pose, substitutions, score_function, ex12=True,
         if debugging_mode:
             print(tf.create_task_and_apply_taskoperations(ref_pose))
 
-    # Set up a flexible-backbone movemap
-    mm = make_move_map(ref_pose, backbone, only_protein)
-
     # Make residue changes
     if len(substitutions) == 0:
-        # If there is no mutation (i.e., the reference sequence), just 
-        # run a minimization. Otherwise run both repacking and minimization.
-        mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
-            None, mm, score_function, 1)
+        # If there is no mutation (i.e., the reference sequence), just run minimization
+        mutated_pose = make_point_changes(ref_pose, None, score_function)
     elif not relax_decoys:
-        mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
-            tf, mm, score_function, rounds)
+        # Run both repacking and minimization
+        mutated_pose = make_point_changes(ref_pose, tf, score_function)
     else:
-        mutated_pose = fast_relax_with_muts(ref_pose, tf, mm, \
-            score_function, relax_decoys)
-
-    # Switch back to a single score function
-    if type(score_function) is list:
-        score_function = score_function[0]
+        mutated_pose = fast_relax_pose_with_muts(ref_pose, tf, score_function, \
+            relax_decoys)
 
     # Initialize data collection dict
     mutated_pose_data = {}
@@ -1047,14 +977,14 @@ def cut_by_chain(wild_pose, cut, list_fasta_names):
     """
     if multiple fasta files, then cut wild_pose into several parts that are matched with FASTA files.
     cut is based on cut_region_by_chains flag. Format is a dictionary, an example is shown below:
-    ['DKRAKVTSAMQTMLFTMLRKLDNDALNNIINNARDGCVPLNIIPLTTAAKLMVVIPDYNTYKNTCDGTTFTYASALWEIQQVVDADSKIV
+    ['DKRAKVTSAMQTMLFTMLRKLDNDALNNIINNARDGCVPLNIIPLTTAAKLMVVIPDYNTYKNTCDGTTFTYASALWEIQQVVDADSKIV \
     QLSEISMDNSPNLAWPLIVTALRA',840], ['KMSDVKCTSVVLLSVLQQLRVESSSKLWAQCVQLHNDILLAKDTTEAFEKMVSLLSVLLSMQG', 954]]
     """
     wild_seqs = {}
     tmp_pose = wild_pose.clone()
     remove_nonprotein_residues(tmp_pose)
-    #if len(list_fasta_name) > 1:
-    if cut:
+    if len(list_fasta_names) > 1:
+        cut = cut.strip().split(",")
         chain_seqs = seq_length_by_chain(wild_pose)
         try:
             if len(cut) == len(list_fasta_names):
@@ -1084,13 +1014,11 @@ def replicate_seqs(replicates, analyze_lists):
     else:
         inds = None
     return inds
-
-def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, 
-    make_model=True, main_chain=1, oligo_chains=None, substrate_chains=None, 
-    cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, cut_order=None, 
-    rep_fa_ind=None, replicate_id1=None, ex12=True, repacking_range=False, 
-    backbone=True, only_protein=False, rounds=1, relax_decoys=False, 
-    debugging_mode=False):
+ 
+def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, ind_type, main_chain=1,  
+    make_model=True, ex12=True, oligo_chains=None, cat_res=None, substrate_chains=None,
+    cut_order = None, rep_fa_ind = None, replicate_id1 = None,
+    repacking_range=False, relax_decoys=False, only_protein=False, debugging_mode=False):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1127,7 +1055,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     print("Chain is:{}".format(list(fa_ind.keys())[0]))
     print("This is the {}th FASTA file!".format(list(fa_ind.values())[0]))
     substitutions, new_subs = compare_sequences(pdb_name, {list(fa_ind.keys())[0] : pdb_seq[list(fa_ind.keys())[0]]}, seqrecord.seq, 
-        query[list(fa_ind.values())[0]], ind_type, pdb_index_match_mutant)
+        query[list(fa_ind.values())[0]], ind_type)
 
     # replicates processing
     if replicate_id1 != None:
@@ -1140,7 +1068,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
                print("Chain is:{}".format(cut_order[fa_inds[ff]]))
                print("This is the {}th FASTA file!".format(fa_inds[ff]))
                res_substitutions, res_new_subs = compare_sequences(pdb_name, {cut_order[fa_inds[ff]]: pdb_seq[cut_order[fa_inds[ff]]]}, \
-                    rest.seq, query[fa_inds[ff]], ind_type,pdb_index_match_mutant)
+                    rest.seq, query[fa_inds[ff]], ind_type)
                substitutions += res_substitutions
                new_subs += res_new_subs
             replicate_id1.pop(mut_tags['id_1']) 
@@ -1163,14 +1091,9 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     # Mutant model for increased accuracy, so that step is performed here
     if make_model:
         mutated_pose, mut_pose_info = \
-            make_mutant_model(ref_pose, new_subs, sf,  ex12=ex12, 
-                repacking_range=repacking_range, backbone=backbone, 
-                rounds=rounds, relax_decoys=relax_decoys, 
+            make_mutant_model(ref_pose, new_subs, sf,  ex12=ex12, \
+                repacking_range=repacking_range, relax_decoys=relax_decoys, \
                 only_protein=only_protein, debugging_mode=debugging_mode)
-        
-        # Switch back to a single score function
-        if type(sf) is list:
-            sf = sf[0]
 
         # Add mutant model info to the output data
         mut_tags.update(mut_pose_info)
@@ -1182,12 +1105,13 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
             mut_tags['rmsd'] = 'NA'
 
         # Set future calculations to use the mutated pose
-        pose = mutated_pose.clone()
+        pose = mutated_pose
     else:
         mutated_pose = None
-        pose = ref_pose.clone()
+        pose = ref_pose
+    print(pose.split_by_chain())
     # Add substitution layer to output data
-    layers = [identify_res_layer(pose, pm[0], main_chain=list(fa_ind.values())[0]+1) 
+    layers = [identify_res_layer(pose, pm[0], main_chain=main_chain) 
         for pm in new_subs]
     mut_tags['layer'] = ';'.join(layers)
 
@@ -1224,77 +1148,37 @@ def main(args):
     opts = '-mute all -run:preserve_header'
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
-    if args.repulsive_type:
-        if args.fast_relax:
-            args.repulsive_type = None
-        else:
-            opts += ' -beta'
     pr.init(opts)
 
     # Set up output directory if generating PDB models
     outdir = out_directory(args.out_dir)
 
-    # Load protein model
+    # Load protease model
     wild_pose = pr.pose_from_pdb(args.template_pdb)
 
-    # Applying symmetry if specified
+    #Set membrane scorefunction if needed
+    if args.membrane:
+        base_sf = 'franklin2019'
+    else:
+        base_sf = 'ref2015_cst'
+
+    # Get score function, applying symmetry if specified
     if args.symmetry:
+        sf = SymmetricScoreFunction()
+        sf.add_weights_from_file(base_sf)
+
         sfsm = SetupForSymmetryMover(args.symmetry)
         sfsm.apply(wild_pose)
-
-    # Setting score functions of different repulsive type is
-    # not compatible with using a membrane score function.
-    # The franklin2019 option will override beta_soft/ref2015_cst
+    else:
+        sf = pr.create_score_function(base_sf)
+    
+    #Set up membrane for membrane protein
     if args.membrane:
-        base_sf_wts = 'franklin2019'
-    elif args.repulsive_type:
-        if len(args.repulsive_type) == 1:
-            if args.repulsive_type[0] == 'soft':
-                base_sf_wts = 'beta_soft'
-            elif args.repulsive_type[0] == 'hard':
-                base_sf_wts = 'ref2015_cst'
-        else:
-            base_sf_wts = list()
-            for rep_type in args.repulsive_type:
-                if rep_type == 'soft':
-                    base_sf_wts.append('beta_soft')
-                elif rep_type == 'hard':
-                    base_sf_wts.append('ref2015_cst')
-    else:
-        base_sf_wts = 'ref2015_cst'
-
-    # Get score function
-    if args.repulsive_type and (not args.membrane):
-        sf = list()
-        for wts in base_sf_wts:
-            if args.symmetry:
-                score_function = SymmetricScoreFunction()
-                score_function.add_weights_from_file(wts)
-            else:
-                score_function = pr.create_score_function(wts)
-            sf.append(score_function)
-    else:
         if args.symmetry:
-            sf = SymmetricScoreFunction()
-            sf.add_weights_from_file(base_sf_wts)
-            if args.membrane:
-                add_memb = pr.rosetta.protocols.membrane.symmetry.SymmetricAddMembraneMover(args.span_file)
+            add_memb = pr.rosetta.protocols.membrane.symmetry.SymmetricAddMembraneMover(args.span_file)
         else:
-            sf = pr.create_score_function(base_sf_wts)
-            if args.membrane:
-                add_memb = pr.rosetta.protocols.membrane.AddMembraneMover(args.span_file)
-        # Set up membrane for membrane protein
-        if args.membrane:
-            add_memb.apply(wild_pose)
-            # The franklin2019 score function does not have constraint
-            # weights incorporated in the score function.
-            # This adds the requisite constraint weights.
-            if args.constrain:
-                sf.set_weight(ScoreType.chainbreak, 1.0)
-                sf.set_weight(ScoreType.coordinate_constraint, 1.0)
-                sf.set_weight(ScoreType.atom_pair_constraint, 1.0)
-                sf.set_weight(ScoreType.angle_constraint, 1.0)
-                sf.set_weight(ScoreType.dihedral_constraint, 1.0)
+            add_memb = pr.rosetta.protocols.membrane.AddMembraneMover(args.span_file)
+        add_memb.apply(wild_pose)
 
     # Apply constraints
     if args.constrain:
@@ -1305,16 +1189,17 @@ def main(args):
     # Find replicates of reference proteins in multiple FASTA files
     # And read wild_seq for each monomer
 
+    list_fasta_names = args.mutants_list.strip().split(",")
     print("------------------------------")
     print("Considered FASTA files are:")
-    print(args.mutants_list)
+    print(list_fasta_names)
 
-    replicates = check_replicates(args.mutants_list)
+    replicates = check_replicates(list_fasta_names)
 
     #Read all FASTA files. need to combine with check_replicates together further
     analyze_lists = []
     wts = []
-    for i in args.mutants_list:
+    for i in list_fasta_names:
         fasta_list = parse_fastafile(i)
         analyze_lists.append(fasta_list[1:])
         wts.append(fasta_list[0])
@@ -1327,28 +1212,31 @@ def main(args):
         
     #wt = fasta_list[0]
     # split wild_pose into different parts that are corresponding to cut_regions
-    pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
+    pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, list_fasta_names)
     print("Cut regions of the pdb and their start index in the pdb are:")
     print(pdb_seqs)
 
-    if not args.cut_region_by_chains:
-        args.cut_region_by_chains = list(pdb_seqs.keys())[0]
+    if args.cut_region_by_chains is not None:
+        cut = args.cut_region_by_chains.strip().split(",")
+    else:
+        cut = list(pdb_seqs.keys())[0]
 
     # Iterate through all identified fasta sequences, altering protease model
     all_mutants_info = pd.DataFrame([])
     all_substitutions = []
-    for c in range(len(args.mutants_list)):
+    for c in range(len(list_fasta_names)):
         for n, mutant in enumerate(analyze_lists[c]):
             single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds = \
-                analyze_mutant_protein(mutant, wild_pose, sf, wts, pdb_seqs, 
-                {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, make_model=args.make_models, 
-                main_chain=args.main_chain, oligo_chains=args.interface_chain, 
-                substrate_chains=args.ligand_chain, cat_res=args.catalytic_residues, 
-                ind_type=args.ind_type, pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
-                cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, replicate_id1=replicate_inds, 
-                ex12=args.extra_rotamers, repacking_range=args.neighborhood_residue, 
-                backbone=args.backbone, only_protein=args.only_protein, rounds=args.rounds, 
-                relax_decoys=args.fast_relax, debugging_mode=args.debugging_mode)
+            analyze_mutant_protein(mutant, wild_pose, sf, wts, pdb_seqs, {cut[c]: c},
+                pdb_name = args.template_pdb,  
+                main_chain=args.main_chain, make_model=args.make_models, 
+                ex12=args.extra_rotamers, oligo_chains=args.interface_chain, 
+                cat_res=args.catalytic_residues, 
+                substrate_chains=args.ligand_chain,
+                repacking_range=args.neighborhood_residue,
+                relax_decoys=args.fast_relax, debugging_mode=args.debugging_mode,
+                ind_type = args.ind_type, cut_order = cut, rep_fa_ind = replicates, replicate_id1 = replicate_inds, 
+                only_protein=args.only_protein)
 
             # Display results for this mutant
             if n == 0 and c == 0:
