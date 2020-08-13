@@ -163,6 +163,9 @@ def parse_args():
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
+                #unconstrain_final_score=args.unconstrain_ddg):
+    parser.add_argument('-no_cst_score', '--unconstrain_ddg', action='store_true', \
+        default=False, help="Call this flag to return energies unconstrained")
     parser.add_argument('-no_models', '--make_models', action='store_false', 
         help='Giving a flag of -no_models will prevent PDB models from being \
         generated. This will prevent the energetic calculations and not yield \
@@ -725,9 +728,9 @@ def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False,
     repack = RestrictToRepackingRLT()
     prevent = PreventRepackingRLT()
     if repacking_range:
-        mutated_res_selection = OrResidueSelector()
+        mutated_res_selection = ResidueIndexSelector()
         for pm in site_changes:
-            mutated_res_selection.add_residue_selector(res_selection)
+            mutated_res_selection.append_index(int(pm[0]))
         repacking_res_selection = NeighborhoodResidueSelector()
         repacking_res_selection.set_focus_selector(mutated_res_selection)
         repacking_res_selection.set_distance(repacking_range)
@@ -843,7 +846,7 @@ def fast_relax_with_muts(pose, score_function, decoys, task_factory, move_map):
 def make_mutant_model(ref_pose, substitutions, score_function, 
     protocol='repack+min', decoys=1, rounds=1, ex12=True, 
     repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False):
+    debugging_mode=False, no_constraint_scoring=True):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -877,12 +880,12 @@ def make_mutant_model(ref_pose, substitutions, score_function,
     else:
         # Make a task factory to substitute residues and repack
         tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein)
+            repacking_range=repacking_range, only_protein=only_protein)
         if debugging_mode:
             print(tf.create_task_and_apply_taskoperations(ref_pose))
         # Make a task factory for reference pose
         ref_tf = make_ref_pose_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein)
+            repacking_range=repacking_range, only_protein=only_protein)
         if protocol == 'repack+min':
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_function, decoys, rounds, tf, mm)
@@ -901,6 +904,14 @@ def make_mutant_model(ref_pose, substitutions, score_function,
     # Initialize data collection dict
     mutated_pose_data = {}
 
+    # Remove constraint weights from score functions for scoring
+    if no_constraint_scoring:
+        score_function.set_weight(ScoreType.chainbreak, 0.0)
+        score_function.set_weight(ScoreType.coordinate_constraint, 0.0)
+        score_function.set_weight(ScoreType.atom_pair_constraint, 0.0)
+        score_function.set_weight(ScoreType.angle_constraint, 0.0)
+        score_function.set_weight(ScoreType.dihedral_constraint, 0.0)
+    
     # Add energy change to output data
     wt_energy = total_energy(ref_pose, score_function)
     mutant_energy = total_energy(mutated_pose, score_function)
@@ -1100,7 +1111,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, cut_order=None, 
     rep_fa_ind=None, replicate_id1=None, protocol='repack+min', decoys=1, rounds=1, 
     ex12=True, repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False):
+    debugging_mode=False, unconstrain_final_score=True):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1176,7 +1187,8 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
             make_mutant_model(ref_pose, new_subs, sf,  protocol=protocol, 
                 decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
-                only_protein=only_protein, debugging_mode=debugging_mode)
+                only_protein=only_protein, debugging_mode=debugging_mode,
+                no_constraint_scoring=unconstrain_final_score)
         
         # Switch back to a single score function
         if type(sf) is list:
@@ -1363,7 +1375,8 @@ def main(args):
                 replicate_id1=replicate_inds, protocol=args.protocol, decoys=args.iterations, \
                 rounds=args.rounds, ex12=args.extra_rotamers, \
                 repacking_range=args.neighborhood_residue, backbone=args.backbone, \
-                only_protein=args.only_protein, debugging_mode=args.debugging_mode)
+                only_protein=args.only_protein, debugging_mode=args.debugging_mode, \
+                unconstrain_final_score=args.unconstrain_ddg)
 
             # Display results for this mutant
             if n == 0 and c == 0:
