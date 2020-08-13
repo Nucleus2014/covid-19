@@ -1247,7 +1247,7 @@ def main(args):
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
     if args.repulsive_type:
-        if args.fast_relax:
+        if args.protocol == 'fastrelax':
             args.repulsive_type = None
         else:
             opts += ' -beta'
