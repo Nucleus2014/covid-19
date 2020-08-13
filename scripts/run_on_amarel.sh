@@ -60,7 +60,7 @@ fi
 
 if ! [ -z "${rounds}" ]
 then
-  rounds="-r "${rounds}
+  rounds="-rnd "${rounds}
 fi
 
 if [ "${only_protein}" == "true" ]
@@ -122,6 +122,7 @@ then
   done
 else
   mutant_list[0]=${mutant_list[0]:0:-10}
+  mv ${mutant_list[0]}".fasta.txt" ${mutant_list[0]}"_matched.fasta.txt"
 fi
 
 for motif_idx in ${!mutant_list[@]}
@@ -129,9 +130,9 @@ do
   total_variants=$(expr `grep -o ">" ${mutant_list[$motif_idx]}"_matched.fasta.txt" | wc -l` - 1)
   if [ -z "${iterations}" ]
   then
-    total_jobs=$((${total_variants} / ${workload} + 1))
+    total_jobs=$((${total_variants} * 2 / ${workload} + 1))
   else
-    total_jobs=$((${total_variants} * ${iterations:5} / ${workload} + 1))
+    total_jobs=$((${total_variants} * ${iterations:5} * 2 / ${workload} + 1))
   fi
 
   srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
