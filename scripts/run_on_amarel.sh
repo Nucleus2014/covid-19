@@ -8,12 +8,13 @@ do
     -ind) ind_type="$2";;
     -sym) symmertry="$2";;
     -mem) membrane="$2";;
+    -proto) protocol="$2";;
+    -ite) iterations="$2";;
     -rep) repulsive_type="$2";;
+    -rnd) rounds="$2";;
     -op) only_protein="$2";;
     -nbh) neighborhood_residue="$2";;
     -fix_bb) fix_backbone="$2";;
-    -r) rounds="$2";;
-    -fr) fast_relax="$2";;
     -debug) debugging_mode="$2";;
     -wl) workload="$2";;
     -part) partition="$2";;
@@ -42,9 +43,24 @@ then
   membrane="-memb -mspan ${membrane}"
 fi
 
+if ! [ -z "${protocol}" ]
+then
+  protocol="-proto ${protocol}"
+fi
+
+if ! [ -z "${iterations}" ]
+then
+  iterations="-ite ${iterations}"
+fi
+
 if ! [ -z "${repulsive_type}" ]
 then
   repulsive_type="-rep ${repulsive_type[@]}"
+fi
+
+if ! [ -z "${rounds}" ]
+then
+  rounds="-r "${rounds}
 fi
 
 if [ "${only_protein}" == "true" ]
@@ -64,16 +80,6 @@ then
   fix_backbone="-fix_bb"
 else
   fix_backbone=""
-fi
-
-if ! [ -z "${rounds}" ]
-then
-  rounds="-r "${rounds}
-fi
-
-if ! [ -z "${fast_relax}" ]
-then
-  fast_relax="-fr ${fast_relax}"
 fi
 
 if [ "${debugging_mode}" == "true" ]
@@ -105,8 +111,9 @@ then
   slurmit.py --job ${protein}_0 --partition ${partition} --begin now \
     --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
     -m ${fastas} -cut ${chains} -rn ${protein}_0 ${ind_type} \
-    ${symmertry} ${membrane} ${repulsive_type} ${only_protein} ${neighborhood_residue} \
-    ${fix_backbone} ${rounds} ${fast_relax} ${debugging_mode}"
+    ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
+    ${rounds} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
+    ${debugging_mode}"
   sleep 0.1
 
   for motif_idx in ${!mutant_list[@]}
@@ -120,11 +127,11 @@ fi
 for motif_idx in ${!mutant_list[@]}
 do
   total_variants=$(expr `grep -o ">" ${mutant_list[$motif_idx]}"_matched.fasta.txt" | wc -l` - 1)
-  if [ -z "${fast_relax}" ]
+  if [ -z "${iterations}" ]
   then
     total_jobs=$((${total_variants} / ${workload} + 1))
   else
-    total_jobs=$((${total_variants} * ${fast_relax:4} / ${workload} + 1))
+    total_jobs=$((${total_variants} * ${iterations:5} / ${workload} + 1))
   fi
 
   srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
@@ -150,8 +157,9 @@ do
       --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
       -m ${mutant_list[$motif_idx]}_matched_${job_idx}.fasta.txt \
       ${cut_region_by_chains[$motif_idx]} -rn ${report_name_prefix}_${job_idx} \
-      ${ind_type} ${symmertry} ${membrane} ${repulsive_type} ${only_protein} \
-      ${neighborhood_residue} ${fix_backbone} ${rounds} ${fast_relax} ${debugging_mode}"
+      ${ind_type} ${symmertry} ${membrane} ${protocol} ${iterations} \
+      ${repulsive_type} ${rounds} ${only_protein} ${neighborhood_residue} \
+      ${fix_backbone} ${debugging_mode}"
     sleep 0.1
   done
 done
