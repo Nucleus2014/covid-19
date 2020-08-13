@@ -727,6 +727,7 @@ def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False,
     if repacking_range:
         mutated_res_selection = OrResidueSelector()
         for pm in site_changes:
+            res_selection = ResidueIndexSelector(str(pm[0]))
             mutated_res_selection.add_residue_selector(res_selection)
         repacking_res_selection = NeighborhoodResidueSelector()
         repacking_res_selection.set_focus_selector(mutated_res_selection)
@@ -877,12 +878,12 @@ def make_mutant_model(ref_pose, substitutions, score_function,
     else:
         # Make a task factory to substitute residues and repack
         tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein)
+            repacking_range=repacking_range, only_protein=only_protein)
         if debugging_mode:
             print(tf.create_task_and_apply_taskoperations(ref_pose))
         # Make a task factory for reference pose
         ref_tf = make_ref_pose_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein)
+            repacking_range=repacking_range, only_protein=only_protein)
         if protocol == 'repack+min':
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_function, decoys, rounds, tf, mm)
@@ -1235,7 +1236,7 @@ def main(args):
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
     if args.repulsive_type:
-        if args.fast_relax:
+        if args.protocol == 'fastrelax':
             args.repulsive_type = None
         else:
             opts += ' -beta'
