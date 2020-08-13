@@ -42,7 +42,8 @@ from pyrosetta.rosetta.core.pose import get_chain_from_chain_id, remove_nonprote
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
     IncludeCurrent, ExtraRotamers, OperateOnResidueSubset, \
-    RestrictAbsentCanonicalAASRLT, RestrictToRepackingRLT, PreventRepackingRLT
+    RestrictAbsentCanonicalAASRLT, RestrictToRepackingRLT, PreventRepackingRLT, \
+    RestrictToRepacking
 from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.select import get_residues_from_subset
@@ -138,9 +139,20 @@ def parse_args():
     parser.add_argument('-mspan', '--span_file', 
         required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
+    parser.add_argument('-proto', '--protocol', choices = ['fastrelax', 'repack+min'], 
+        default = 'repack+min', help='Employ either fast relax protocol or repacking \
+        and minimization on the pose.')
+    parser.add_argument('-ite', '--iterations', type=int, default=1, 
+        help='Giving a flag of -ite, each variant will run [ite] trajectories and get \
+        the best result.')
     parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
         choices=['soft', 'hard'], help='Using the normal hard-rep or the \
         soft-rep score function for repacking and minimization, respectively.')
+    parser.add_argument('-rnd', '--rounds', type=int, default=1, 
+        help='Conduct how many rounds of repacking and minimization.')
+    parser.add_argument('-no_ex', '--extra_rotamers', action='store_false', 
+        help='Giving a flag of -no_ex will prevent using extra rotamer \
+        sampling during repacking, saving a lot of time with reduced sampling.')
     parser.add_argument('-op', '--only_protein', action='store_true', 
         help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
     parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
@@ -148,18 +160,9 @@ def parse_args():
             within [nbh] angstroms of the mutated residue to repack.')
     parser.add_argument('-fix_bb', '--backbone', action='store_false', 
         help='Whether the backbone is optimized in minimization.')
-    parser.add_argument('-r', '--rounds', type=int, default=1, 
-        help='Conduct how many rounds of repacking and minimization.')
-    parser.add_argument('-fr', '--fast_relax', type=int, default=None, 
-        help='Giving a flag of -fr will employ fast relax protocol on the \
-            whole protein instead of repacking and minimization, running for \
-            [fr] trajectories.')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
-    parser.add_argument('-no_ex', '--extra_rotamers', action='store_false', 
-        help='Giving a flag of -no_ex will prevent using extra rotamer \
-        sampling during repacking, saving a lot of time with reduced sampling.')
     parser.add_argument('-no_models', '--make_models', action='store_false', 
         help='Giving a flag of -no_models will prevent PDB models from being \
         generated. This will prevent the energetic calculations and not yield \
@@ -643,7 +646,8 @@ def coord_constrain_pose(pose):
     return pose
 
 
-def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=False):
+def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=False, 
+    only_protein=False):
     """
     Input a site_changes list of 3-member tuples, each representing a point 
     substitution in the form output by the compare_sequences function: 
@@ -657,7 +661,6 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
 
     Modified by Zhuofan
     """
-# Initialize selection of all altered residues
     # Make TaskFactory to input changes
     tf = TaskFactory()
     tf.push_back(IncludeCurrent())
@@ -666,39 +669,52 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
         tf.push_back(ExtraRotamers(0, 2, 1))
 
     # Force packing to new residue for each mutated site
-    mutated_res_selection = OrResidueSelector() # Keep list of mobile residues
+    mutated_res_selection = OrResidueSelector() # Initialize selection of all altered residues
     for pm in site_changes:
         res_selection = ResidueIndexSelector(str(pm[0]))
         aa_force = RestrictAbsentCanonicalAASRLT()
         aa_force.aas_to_keep(pm[2])
         tf.push_back(OperateOnResidueSubset(aa_force, res_selection))
         mutated_res_selection.add_residue_selector(res_selection)
+    # Repack some residues to accommodate substitutions
+    repack = RestrictToRepackingRLT()
+    prevent = PreventRepackingRLT()
     if repacking_range:
         # Repack surrounding residues within [repacking_range] angstroms
         repacking_res_selection = NeighborhoodResidueSelector()
         repacking_res_selection.set_focus_selector(mutated_res_selection)
         repacking_res_selection.set_distance(repacking_range)
         repacking_res_selection.set_include_focus_in_subset(False)
-        repack = RestrictToRepackingRLT()
-        tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection))
-        # Do nothing to other residues
-        mutated_and_repacking_res_selection = OrResidueSelector(mutated_res_selection, repacking_res_selection)
-        prevent = PreventRepackingRLT()
-        # By setting the arg2 to True, the mutation and repacking res selection is flipped
-        tf.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_res_selection, True))
+        if only_protein:
+            protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
+            repacking_res_selection_only_protein = AndResidueSelector(repacking_res_selection, \
+                protein_selection)
+            tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection_only_protein))
+            mutated_and_repacking_res_selection = OrResidueSelector(mutated_res_selection, \
+                repacking_res_selection_only_protein)
+            tf.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_res_selection, True))
+        else:
+            tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection))
+            # Do nothing to other residues
+            mutated_and_repacking_res_selection = OrResidueSelector(mutated_res_selection, repacking_res_selection)
+            # By setting the arg2 to True, the mutation and repacking res selection is flipped
+            tf.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_res_selection, True))
     else:
-        # Repack all other residues to accommodate substitutions
-        repack = RestrictToRepackingRLT()
-        # By setting the arg2 to True, the mutation selection is flipped
-        tf.push_back(OperateOnResidueSubset(repack, mutated_res_selection, True))
+        if only_protein:
+            protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
+            repack_res_selection = AndResidueSelector(NotResidueSelector(mutated_res_selection), protein_selection)
+            tf.push_back(OperateOnResidueSubset(repack, repack_res_selection))
+            tf.push_back(OperateOnResidueSubset(prevent, protein_selection, True))
+        else:
+            # By setting the arg2 to True, the mutation selection is flipped
+            tf.push_back(OperateOnResidueSubset(repack, mutated_res_selection, True))
 
     return tf
 
 
-def make_point_mutant_task_factory_only_protein(site_changes, ex12=True, \
-    repacking_range=False):
+def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False, 
+    only_protein=False):
     """
-    Only repacking protein residues.
     Written by Zhuofan
     """
     tf = TaskFactory()
@@ -706,45 +722,32 @@ def make_point_mutant_task_factory_only_protein(site_changes, ex12=True, \
     if ex12:
         tf.push_back(ExtraRotamers(0, 1, 1))
         tf.push_back(ExtraRotamers(0, 2, 1))
-
-    mutated_res_selection = OrResidueSelector()
-    for pm in site_changes:
-        res_selection = ResidueIndexSelector(str(pm[0]))
-        aa_force = RestrictAbsentCanonicalAASRLT()
-        aa_force.aas_to_keep(pm[2])
-        tf.push_back(OperateOnResidueSubset(aa_force, res_selection))
-        mutated_res_selection.add_residue_selector(res_selection)
-
-    protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
-
+    repack = RestrictToRepackingRLT()
+    prevent = PreventRepackingRLT()
     if repacking_range:
-        neighboring_res_selection = NeighborhoodResidueSelector()
-        neighboring_res_selection.set_focus_selector(mutated_res_selection)
-        neighboring_res_selection.set_distance(repacking_range)
-        neighboring_res_selection.set_include_focus_in_subset(False)
-
-        repacking_res_selection = AndResidueSelector(\
-            neighboring_res_selection, protein_selection)
-
-        repack = RestrictToRepackingRLT()
-        tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection))
-
-        mutated_and_repacking_res_selection = OrResidueSelector(\
-            mutated_res_selection, repacking_res_selection)
-        prevent = PreventRepackingRLT()
-        tf.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_res_selection, \
-            True))
-
+        mutated_res_selection = OrResidueSelector()
+        for pm in site_changes:
+            mutated_res_selection.add_residue_selector(res_selection)
+        repacking_res_selection = NeighborhoodResidueSelector()
+        repacking_res_selection.set_focus_selector(mutated_res_selection)
+        repacking_res_selection.set_distance(repacking_range)
+        repacking_res_selection.set_include_focus_in_subset(True)
+        if only_protein:
+            protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
+            repacking_res_selection_only_protein = AndResidueSelector(repacking_res_selection, \
+                protein_selection)
+            tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection_only_protein))
+            tf.push_back(OperateOnResidueSubset(prevent, repacking_res_selection_only_protein, True))
+        else:
+            tf.push_back(OperateOnResidueSubset(repack, repacking_res_selection))
+            tf.push_back(OperateOnResidueSubset(prevent, repacking_res_selection, True))
     else:
-        not_portein_selection = NotResidueSelector(protein_selection)
-        mutated_and_static_res_selection = OrResidueSelector(mutated_res_selection, \
-            not_portein_selection)
-
-        repack = RestrictToRepackingRLT()
-        tf.push_back(OperateOnResidueSubset(repack, mutated_and_static_res_selection, True))
-
-        prevent = PreventRepackingRLT()
-        tf.push_back(OperateOnResidueSubset(prevent, not_portein_selection))
+        if only_protein:
+            protein_selection = ResiduePropertySelector(ResidueProperty.PROTEIN)
+            tf.push_back(OperateOnResidueSubset(repack, protein_selection))
+            tf.push_back(OperateOnResidueSubset(prevent, protein_selection, True))
+        else:
+            tf.push_back(RestrictToRepacking())
 
     return tf
 
@@ -767,8 +770,8 @@ def make_move_map(pose, backbone, only_protein):
     return move_map
 
 
-def repacking_with_muts_and_minimization(pose, task_factory, move_map, 
-    score_function, rounds):
+def repacking_with_muts_and_minimization(pose, score_function, decoys, 
+    rounds, task_factory, move_map):
     """
     Applies point mutations to a given pose. This is done through a 
     PackRotamersMover, followed by minimization.
@@ -776,39 +779,44 @@ def repacking_with_muts_and_minimization(pose, task_factory, move_map,
     site_changes is a list of point_mutation objects
     Modified by Zhuofan.
     """
-    # Make a copy Pose
-    mutated_pose = pr.Pose(pose)
-
     # Repacking
-    if task_factory:
-        # Apply changes with PackRotamersMover
-        prm = PackRotamersMover()
-        if type(score_function) is list:
-            prm.score_function(score_function[0])
-        else:
-            prm.score_function(score_function)
-        prm.task_factory(task_factory)
+    prm = PackRotamersMover()
+    if type(score_function) is list:
+        prm.score_function(score_function[0])
+    else:
+        prm.score_function(score_function)
+    prm.task_factory(task_factory)
 
     # Minimization after repacking
-    # If there is no mutation (i.e., the reference sequence), just run minimization
     min_mover = MinMover()
     if type(score_function) is list:
         min_mover.score_function(score_function[1])
     else:
         min_mover.score_function(score_function)
     min_mover.movemap(move_map)
-
-    for i in range(rounds):
-        if task_factory:
+    
+    for decoy in range(decoys):
+        # Make a copy Pose
+        pose_copy = pr.Pose(pose)
+        for rnd in range(rounds):
             # Apply the PackRotamersMover
-            prm.apply(mutated_pose)
-        # Apply the MinMover to the modified Pose
-        min_mover.apply(mutated_pose)
+            prm.apply(pose_copy)
+            # Apply the MinMover to the modified Pose
+            min_mover.apply(pose_copy)
+        
+        if type(score_function) is list:
+            current_energy = total_energy(pose_copy, score_function[1])
+        else:
+            current_energy = total_energy(pose_copy, score_function)
+
+        if decoy == 0 or current_energy < lowest_energy:
+            lowest_energy = current_energy
+            mutated_pose = pose_copy
 
     return mutated_pose
 
 
-def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
+def fast_relax_with_muts(pose, score_function, decoys, task_factory, move_map):
     """
     Applies point mutations to a given pose. This is done through a 
     Fast Relax Mover.
@@ -820,28 +828,22 @@ def fast_relax_with_muts(pose, task_factory, move_map, score_function, decoys):
     fast_relax.set_task_factory(task_factory)
     fast_relax.set_movemap(move_map)
 
-    traj_idx = 0
-    if_first_decoy = True
-    while traj_idx < decoys:
-        pose_copy = pr.Pose()
-        pose_copy.assign(pose)
+    for decoy in range(decoys):
+        pose_copy = pr.Pose(pose)
         fast_relax.apply(pose_copy)
-        decoy_energy = total_energy(pose_copy, score_function)
-        if if_first_decoy:
-            if_first_decoy = False
+        current_energy = total_energy(pose_copy, score_function)
+
+        if decoy == 0 or current_energy < lowest_energy:
+            lowest_energy = current_energy
             mutated_pose = pose_copy
-            lowest_energy = decoy_energy
-        elif decoy_energy < lowest_energy:
-            mutated_pose = pose_copy
-            lowest_energy = decoy_energy
-        traj_idx += 1
 
     return mutated_pose
 
 
-def make_mutant_model(ref_pose, substitutions, score_function, ex12=True, 
-    repacking_range=False, backbone=True, rounds=1, relax_decoys=False, 
-    only_protein=False, debugging_mode=False):
+def make_mutant_model(ref_pose, substitutions, score_function, 
+    protocol='repack+min', decoys=1, rounds=1, ex12=True, 
+    repacking_range=False, backbone=True, only_protein=False, 
+    debugging_mode=False):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -857,32 +859,40 @@ def make_mutant_model(ref_pose, substitutions, score_function, ex12=True,
 
     Modified by Zhuofan.
     """
-    # Make a task factory to substitute residues and repack
-    if len(substitutions) > 0:
-        if only_protein:
-            tf = make_point_mutant_task_factory_only_protein(substitutions, \
-                ex12=ex12, repacking_range=repacking_range)
-        else:
-            tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
-                repacking_range=repacking_range)
-        if debugging_mode:
-            print(tf.create_task_and_apply_taskoperations(ref_pose))
-
-    # Set up a flexible-backbone movemap
+    # Set up a flexible backbone or fixed backbone movemap
     mm = make_move_map(ref_pose, backbone, only_protein)
 
     # Make residue changes
     if len(substitutions) == 0:
         # If there is no mutation (i.e., the reference sequence), just 
         # run a minimization. Otherwise run both repacking and minimization.
-        mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
-            None, mm, score_function, 1)
-    elif not relax_decoys:
-        mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
-            tf, mm, score_function, rounds)
+        min_mover = MinMover()
+        if type(score_function) is list:
+            min_mover.score_function(score_function[1])
+        else:
+            min_mover.score_function(score_function)
+        min_mover.movemap(mm)
+        min_mover.apply(ref_pose)
+        mutated_pose = pr.Pose(ref_pose)
     else:
-        mutated_pose = fast_relax_with_muts(ref_pose, tf, mm, \
-            score_function, relax_decoys)
+        # Make a task factory to substitute residues and repack
+        tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
+            repacking_range=repacking_range, only_protein)
+        if debugging_mode:
+            print(tf.create_task_and_apply_taskoperations(ref_pose))
+        # Make a task factory for reference pose
+        ref_tf = make_ref_pose_task_factory(substitutions, ex12=ex12, \
+            repacking_range=repacking_range, only_protein)
+        if protocol == 'repack+min':
+            mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
+                score_function, decoys, rounds, tf, mm)
+            ref_pose = repacking_with_muts_and_minimization(ref_pose, \
+                score_function, decoys, rounds, ref_tf, mm)
+        elif protocol == 'fastrelax':
+            mutated_pose = fast_relax_with_muts(ref_pose, score_function, \
+                decoys, tf, mm)
+            ref_pose = fast_relax_with_muts(ref_pose, score_function, \
+                decoys, ref_tf, mm)
 
     # Switch back to a single score function
     if type(score_function) is list:
@@ -1088,8 +1098,8 @@ def replicate_seqs(replicates, analyze_lists):
 def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, 
     make_model=True, main_chain=1, oligo_chains=None, substrate_chains=None, 
     cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, cut_order=None, 
-    rep_fa_ind=None, replicate_id1=None, ex12=True, repacking_range=False, 
-    backbone=True, only_protein=False, rounds=1, relax_decoys=False, 
+    rep_fa_ind=None, replicate_id1=None, protocol='repack+min', decoys=1, rounds=1, 
+    ex12=True, repacking_range=False, backbone=True, only_protein=False, 
     debugging_mode=False):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
@@ -1163,9 +1173,9 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     # Mutant model for increased accuracy, so that step is performed here
     if make_model:
         mutated_pose, mut_pose_info = \
-            make_mutant_model(ref_pose, new_subs, sf,  ex12=ex12, 
+            make_mutant_model(ref_pose, new_subs, sf,  protocol=protocol, 
+                decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
-                rounds=rounds, relax_decoys=relax_decoys, 
                 only_protein=only_protein, debugging_mode=debugging_mode)
         
         # Switch back to a single score function
@@ -1229,6 +1239,8 @@ def main(args):
             args.repulsive_type = None
         else:
             opts += ' -beta'
+        if args.repulsive_type[0] == 'soft':
+            opts += ' -fa_max_dis 9.0'
     pr.init(opts)
 
     # Set up output directory if generating PDB models
@@ -1339,16 +1351,19 @@ def main(args):
     all_substitutions = []
     for c in range(len(args.mutants_list)):
         for n, mutant in enumerate(analyze_lists[c]):
+            ref_pose = pr.Pose(wild_pose)
             single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds = \
-                analyze_mutant_protein(mutant, wild_pose, sf, wts, pdb_seqs, 
-                {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, make_model=args.make_models, 
-                main_chain=args.main_chain, oligo_chains=args.interface_chain, 
-                substrate_chains=args.ligand_chain, cat_res=args.catalytic_residues, 
-                ind_type=args.ind_type, pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
-                cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, replicate_id1=replicate_inds, 
-                ex12=args.extra_rotamers, repacking_range=args.neighborhood_residue, 
-                backbone=args.backbone, only_protein=args.only_protein, rounds=args.rounds, 
-                relax_decoys=args.fast_relax, debugging_mode=args.debugging_mode)
+                analyze_mutant_protein(mutant, ref_pose, sf, wts, pdb_seqs, 
+                {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, 
+                make_model=args.make_models, main_chain=args.main_chain, 
+                oligo_chains=args.interface_chain, substrate_chains=args.ligand_chain, 
+                cat_res=args.catalytic_residues, ind_type=args.ind_type, 
+                pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
+                cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, 
+                replicate_id1=replicate_inds, protocol=args.protocol, decoys=args.iterations, \
+                rounds=args.rounds, ex12=args.extra_rotamers, \
+                repacking_range=args.neighborhood_residue, backbone=args.backbone, \
+                only_protein=args.only_protein, debugging_mode=args.debugging_mode)
 
             # Display results for this mutant
             if n == 0 and c == 0:
