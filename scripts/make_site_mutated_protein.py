@@ -1251,8 +1251,8 @@ def main(args):
             args.repulsive_type = None
         else:
             opts += ' -beta'
-        if args.repulsive_type[0] == 'soft':
-            opts += ' -fa_max_dis 9.0'
+    if args.protocol == 'repack+min':
+        opts += ' -fa_max_dis 9.0'
     pr.init(opts)
 
     # Set up output directory if generating PDB models
