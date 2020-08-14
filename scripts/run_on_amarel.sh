@@ -113,7 +113,7 @@ then
     -m ${fastas} -cut ${chains} -rn ${protein}_0 ${ind_type} \
     ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
     ${rounds} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
-    ${debugging_mode}"
+    ${debugging_mode} -no_cst_score"
   sleep 0.1
 
   for motif_idx in ${!mutant_list[@]}
@@ -160,7 +160,7 @@ do
       ${cut_region_by_chains[$motif_idx]} -rn ${report_name_prefix}_${job_idx} \
       ${ind_type} ${symmertry} ${membrane} ${protocol} ${iterations} \
       ${repulsive_type} ${rounds} ${only_protein} ${neighborhood_residue} \
-      ${fix_backbone} ${debugging_mode}"
+      ${fix_backbone} ${debugging_mode} -no_cst_score"
     sleep 0.1
   done
 done
