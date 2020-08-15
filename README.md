@@ -18,7 +18,7 @@ Here is a update recording for the pipeline of generating mutations for covid-19
 * `-t`/`--template_pdb`: Input a starting PDB file for comparison and from which mutants will be generated.
 * `-m`/`--mutants_list`: Input a fasta list file or multiple fasta files separated by space identifying the mutations.
 
-#### 2. Choices of modeling protocols
+#### 2. Choices of the modeling protocol
 
 * `-proto`/`--protocol`: Choose the modeling protocol, choices=['fastrelax', 'repack+min'], default='repack+min'.
 * `-ite`/`--iterations`: Giving a flag of -ite, [ite] trajectories will be run for each variant and output the decoy with the lowest score.
