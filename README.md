@@ -28,7 +28,7 @@ Here is a update recording for the pipeline of generating mutations for covid-19
 * `-sym`/`--symmetry`: If the pose is symmetric, include a symdef file.
 * `-memb`/`--membrane`: Declare if the protein is a membrane protein.
 * `-mspan`/`--span_file`: If the pose is a membrane protein, include a spanfile.
-* `-cut`/`--cut_region_by_chains`: if multiple fasta files input or only a part of regions to be mutated, regions are needed to be defined in the same order of fasta files order. example: "A,C,B"
+* `-cut`/`--cut_region_by_chains`: if multiple fasta files input or only a part of regions to be mutated, regions are needed to be defined in the same order of fasta files order. example: "A C B"
 * `-pmm`/`--is_pdb_index_match_mutant`: if pdb index matches mutant index, then set this flag to avoid pairwise alignment which costs much time and not so accurate for those alignments with many gaps.
 * `-op`/`--only_protein`: Giving a flag of -op will prevent ligands and RNA motifs from repacking.
 
@@ -49,10 +49,10 @@ Here is a update recording for the pipeline of generating mutations for covid-19
    *  `python make_site_mutated_protein.py -t nsp1_relaxed.pdb -m Nsp1_GISAID.fasta.txt -nbh 8.0 -rn Nsp1_fast`
 *  Mutations on a Asymmetric protein with the same sequences for several chains
    * Example: 6VSB
-   * `python make_site_mutated_protein.py -t 6VSB_relaxed.pdb -m S-protein_GISAID.fasta.txt,S-protein_GISAID.fasta.txt,S-protein_GISAID.fasta.txt -pmm -nbh 8.0 -rn 6VSB_fast -cut "A,B,C"`
+   * `python make_site_mutated_protein.py -t 6VSB_relaxed.pdb -m S-protein_GISAID.fasta.txt S-protein_GISAID.fasta.txt S-protein_GISAID.fasta.txt -pmm -nbh 8.0 -rn 6VSB_fast -cut "A B C"`
 *  Mutations on a asymmetric protein with different mutants
    *  Example: 7bv2
-   *  `python make_site_mutated_protein.py -t 7bv2_relaxed.pdb -m Nsp12_GISAID.fasta.txt,Nsp8_GISAID.fasta.txt,Nsp7_GISAID.fasta.txt -pmm -nbh 8.0 -rn 7bv2_fast -cut "A,B,C"`
+   *  `python make_site_mutated_protein.py -t 7bv2_relaxed.pdb -m Nsp12_GISAID.fasta.txt Nsp8_GISAID.fasta.txt Nsp7_GISAID.fasta.txt -pmm -nbh 8.0 -rn 7bv2_fast -cut "A B C"`
 *  Mutations on only one chain of a asymmetric protein
    *  Example: 6m17
    *  `python make_site_mutated_protein.py -t 6m17_relaxed.pdb -m S-protein_GISAID.fasta.txt -nbh 8.0 -rn 6m17_fast -cut "E"`
