@@ -207,9 +207,8 @@ def read_name_tag(fasta_id):
     replaced by '_'. Returns a dict with all values.
     """
     tag_dict = {}
-
+    print("Now processing: {}".format(fasta_id))
     breakup_id = fasta_id.split('|')
-    print(breakup_id)
     tag_dict['date_first'] = convert_date_str(breakup_id[0])
     tag_dict['date_last'] = convert_date_str(breakup_id[1])
     tag_dict['count'] = int(breakup_id[2].split('=')[-1])
@@ -1112,7 +1111,8 @@ def replicate_seqs(replicates, analyze_lists):
 def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_name, 
     make_model=True, main_chain=1, oligo_chains=None, substrate_chains=None, 
     cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, cut_order=None, 
-    rep_fa_ind=None, replicate_id1=None, protocol='repack+min', decoys=1, rounds=1, 
+    rep_fa_ind=None, replicate_id1=None, rep_searched=None,
+    protocol='repack+min', decoys=1, rounds=1, 
     ex12=True, repacking_range=False, backbone=True, only_protein=False, 
     debugging_mode=False, unconstrain_final_score=True):
     """
@@ -1167,8 +1167,11 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
                     rest.seq, query[fa_inds[ff]], ind_type,pdb_index_match_mutant)
                substitutions += res_substitutions
                new_subs += res_new_subs
-            replicate_id1.pop(mut_tags['id_1']) 
-            
+            replicate_id1.pop(mut_tags['id_1'])
+ 
+    rep_searched.append(mut_tags['id_1'])
+    print("For protein {0}, substitutions are {1}".format(mut_tags['id_1'],new_subs))
+    
     # Add substitutions to output data
     sub_shorts = [get_mutant_brief(pm) for pm in substitutions]
     mut_tags['substitutions'] = ';'.join(sub_shorts)
@@ -1240,7 +1243,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     # Convert to a DataFrame
     mut_df = pd.DataFrame(mut_tags, index=[1])
 
-    return mut_df, mutated_pose, substitutions, new_subs, replicate_id1
+    return mut_df, mutated_pose, substitutions, new_subs, replicate_id1, rep_searched
 
 ########## Executing ###########################################################         
 
@@ -1331,7 +1334,6 @@ def main(args):
     # edited by Changpeng
     # Find replicates of reference proteins in multiple FASTA files
     # And read wild_seq for each monomer
-
     print("------------------------------")
     print("Considered FASTA files are:")
     print(args.mutants_list)
@@ -1347,6 +1349,7 @@ def main(args):
         wts.append(fasta_list[0])
     # get the replicate inds in FASTA files
     replicate_inds = replicate_seqs(replicates,analyze_lists)
+    print(replicate_inds)
  
     # Take subset of fasta list if parallelizing
     #analyze_list = partition_list(fasta_list[1:], *args.parallel_partition)
@@ -1364,23 +1367,28 @@ def main(args):
     # Iterate through all identified fasta sequences, altering protease model
     all_mutants_info = pd.DataFrame([])
     all_substitutions = []
+    replicates_searched = []
     for c in range(len(args.mutants_list)):
         for n, mutant in enumerate(analyze_lists[c]):
-            ref_pose = pr.Pose(wild_pose)
-            single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds = \
-                analyze_mutant_protein(mutant, ref_pose, sf, wts, pdb_seqs, 
-                {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, 
-                make_model=args.make_models, main_chain=args.main_chain, 
-                oligo_chains=args.interface_chain, substrate_chains=args.ligand_chain, 
-                cat_res=args.catalytic_residues, ind_type=args.ind_type, 
-                pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
-                cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, 
-                replicate_id1=replicate_inds, protocol=args.protocol, decoys=args.iterations, \
-                rounds=args.rounds, ex12=args.extra_rotamers, \
-                repacking_range=args.neighborhood_residue, backbone=args.backbone, \
-                only_protein=args.only_protein, debugging_mode=args.debugging_mode, \
-                unconstrain_final_score=args.unconstrain_ddg)
-
+            if read_name_tag(mutant.id)['id_1'] not in replicates_searched: 
+                ref_pose = pr.Pose(wild_pose)
+                single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds, \
+                    replicates_searched = \
+                    analyze_mutant_protein(mutant, ref_pose, sf, wts, pdb_seqs, 
+                    {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, 
+                    make_model=args.make_models, main_chain=args.main_chain, 
+                    oligo_chains=args.interface_chain, substrate_chains=args.ligand_chain, 
+                    cat_res=args.catalytic_residues, ind_type=args.ind_type, 
+                    pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
+                    cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, 
+                    replicate_id1=replicate_inds, rep_searched=replicates_searched, \
+                    protocol=args.protocol, decoys=args.iterations, \
+                    rounds=args.rounds, ex12=args.extra_rotamers, \
+                    repacking_range=args.neighborhood_residue, backbone=args.backbone, \
+                    only_protein=args.only_protein, debugging_mode=args.debugging_mode, \
+                    unconstrain_final_score=args.unconstrain_ddg)
+            else:
+                print("Replicate that is already detected!. Skip this round of mutation.")
             # Display results for this mutant
             if n == 0 and c == 0:
                 print(single_mutant_info.to_string(header=True))
@@ -1405,7 +1413,7 @@ def main(args):
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
             for s in subs_clean:
-                if s not in all_substitutions:
+    #            if s not in all_substitutions:
                     all_substitutions.append(s)
     # Make report names
     if args.report_name:
@@ -1429,16 +1437,18 @@ def main(args):
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
     counts = []
-    #all_subs_clean = set(all_substitutions)
-    #for sub in all_subs_clean:
-        #counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
-    all_subs_info = pd.DataFrame(all_substitutions)
+    all_subs_clean = set(all_substitutions)
+    for sub in all_subs_clean:
+        counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
+    all_subs_info = pd.DataFrame(all_subs_clean)
     all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
     all_subs_info['count'] = counts
     chains = set(all_subs_info['chain'].values.tolist())
     for c in chains:
         #pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
         #subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
+        chain_subs_info = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
+        chain_subs_info.to_csv(subs_report_name + c)
     all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
     #subs_pivot.to_csv(pivot_report_name)
