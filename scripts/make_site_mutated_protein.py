@@ -34,6 +34,7 @@ from Bio import SeqIO
 import datetime 
 from os import makedirs
 from os.path import isdir, join
+import numpy as np
 import pandas as pd
 import pyrosetta as pr
 from pyrosetta.rosetta.core.chemical import ResidueProperty
@@ -374,7 +375,7 @@ def get_mutant_brief(point_substitution):
     """
     m =     point_substitution[4] + \
             point_substitution[1] + \
-            str(point_substitution[0]) + \
+            str(point_substitution[0]) + "_" + \
             point_substitution[2]
 
     return m
@@ -1391,7 +1392,7 @@ def main(args):
                 first_id = single_mutant_info['id_1'].values[0].replace('/', '_')
                 subs_clean = []
                 for sub in substitutions:
-                    if sub[3] == True:
+                    #if sub[3] == True:
                         subs_clean.append((sub[4],sub[0],sub[1],sub[2]))
                 mut_summary = [get_mutant_brief(s) for s in substitutions]
                 str_mut_sum = '-'.join(mut_summary)
@@ -1402,16 +1403,17 @@ def main(args):
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
             for s in subs_clean:
-                if s not in all_substitutions:
+                #if s not in all_substitutions:
                     all_substitutions.append(s)
-
     # Make report names
     if args.report_name:
         main_report_name = join(outdir, args.report_name + '_mutants')
         subs_report_name = join(outdir, args.report_name + '_substitutions')
+        pivot_report_name = join(outidr, args.report_name + '_substitutions_pivot')
     else:
         main_report_name = join(outdir, 'mutants_summary')
         subs_report_name = join(outdir, 'substitutions_summary')
+        pivot_report_name = join(outdir, 'pivot_summary')
 
     if args.parallel_partition != [1, 1]:
         main_report_name += '_{1}_of_{0}.csv'.format(*(args.parallel_partition))
@@ -1419,15 +1421,25 @@ def main(args):
     else:
         main_report_name += '.csv'
         subs_report_name += '.csv'
-
+        pivot_report_name += '.csv'
     # Make mutants summary csv
     all_mutants_info.to_csv(main_report_name, index=False)
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
-    all_subs_info = pd.DataFrame(all_substitutions)
+    counts = []
+    all_subs_clean = set(all_substitutions)
+    for sub in all_subs_clean:
+        counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
+    all_subs_info = pd.DataFrame(all_subs_clean)
     all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
+    all_subs_info['count'] = counts
+    chains = set(all_subs_info['chain'].values.tolist())
+    for c in chains:
+        pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
+        subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
     all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
+    subs_pivot.to_csv(pivot_report_name)
 
 
 if __name__ == '__main__':
