@@ -16,12 +16,17 @@ Here is a update recording for the pipeline of generating mutations for covid-19
 #### 1. Must-include flags
 
 * `-t`/`--template_pdb`: Input a starting PDB file for comparison and from which mutants will be generated.
-* `-m`/`--mutants_list`: Input a fasta list file or files identifying the mutations.
+* `-m`/`--mutants_list`: Input a fasta list file or multiple fasta files separated by space identifying the mutations.
 
-#### 2. Choices of mutation protocols
+#### 2. Choices of modeling protocols
 
+* `-proto`/`--protocol`: Choose the modeling protocol, choices=['fastrelax', 'repack+min'], default='repack+min'.
+* `-ite`/`--iterations`: Giving a flag of -ite, [ite] trajectories will be run for each variant and output the decoy with the lowest score.
+* `-rep`/`--repulsive_type`: Choose score functions that will be used in repacking and minimization. Give two parameters in ['soft', 'hard'] separated by space.
+* `-rnd`/`--rounds`: The rounds of repacking and minimization calculations being repeated in one trajectory.
 * `-nbh`/`--neighborhood_residue`: Giving a flag of -nbh will also allow surrounding residues within [nbh] angstroms of the mutated residue to repack. Usually be the fastest way to do mutations.
-* `-fr`/`--fast_relax`: Giving a flag of -fr will employ fast relax protocol on whole protein instead of repacking and minimization, running for [fr] trajectories. It is a slowest way to do mutations.
+* `-op`/`--only_protein`: Giving a flag of -op will prevent non-protein motifs from repacking, such as ligands and RNA.
+* `-fix_bb`/`--backbone`: Giving a flag of -fix_bb will hold the backbone fixed in minimization.
 
 #### 3. Specified flags required for different cases
 
@@ -30,7 +35,6 @@ Here is a update recording for the pipeline of generating mutations for covid-19
 * `-mspan`/`--span_file`: If the pose is a membrane protein, include a spanfile.
 * `-cut`/`--cut_region_by_chains`: if multiple fasta files input or only a part of regions to be mutated, regions are needed to be defined in the same order of fasta files order. example: "A C B"
 * `-pmm`/`--is_pdb_index_match_mutant`: if pdb index matches mutant index, then set this flag to avoid pairwise alignment which costs much time and not so accurate for those alignments with many gaps.
-* `-op`/`--only_protein`: Giving a flag of -op will prevent ligands and RNA motifs from repacking.
 
 #### 4. Other customized flags
 
