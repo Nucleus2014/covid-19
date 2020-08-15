@@ -140,27 +140,29 @@ def parse_args():
     parser.add_argument('-mspan', '--span_file', 
         required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
-    parser.add_argument('-proto', '--protocol', choices = ['fastrelax', 'repack+min'], 
+    parser.add_argument('-proto', '--protocol', choices=['fastrelax', 'repack+min'], 
         default = 'repack+min', help='Employ either fast relax protocol or repacking \
         and minimization on the pose.')
     parser.add_argument('-ite', '--iterations', type=int, default=1, 
-        help='Giving a flag of -ite, each variant will run [ite] trajectories and get \
-        the best result.')
+        help='Giving a flag of -ite, [ite] trajectories will be run for each variant \
+        and output the decoy with the lowest score.')
     parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
         choices=['soft', 'hard'], help='Using the normal hard-rep or the \
         soft-rep score function for repacking and minimization, respectively.')
     parser.add_argument('-rnd', '--rounds', type=int, default=1, 
-        help='Conduct how many rounds of repacking and minimization.')
+        help='The rounds of repacking and minimization calculations being repeated \
+        in one trajectory..')
     parser.add_argument('-no_ex', '--extra_rotamers', action='store_false', 
         help='Giving a flag of -no_ex will prevent using extra rotamer \
         sampling during repacking, saving a lot of time with reduced sampling.')
-    parser.add_argument('-op', '--only_protein', action='store_true', 
-        help='Giving a flag of -op will prevent ligands and RNA motifs from repacking.')
     parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
         help='Giving a flag of -nbh will also allow surrounding residues \
             within [nbh] angstroms of the mutated residue to repack.')
+    parser.add_argument('-op', '--only_protein', action='store_true', 
+        help='Giving a flag of -op will prevent non-protein motifs from repacking, \
+        such as ligands and RNA.')
     parser.add_argument('-fix_bb', '--backbone', action='store_false', 
-        help='Whether the backbone is optimized in minimization.')
+        help='Giving a flag of -fix_bb will hold the backbone fixed in minimization.')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
