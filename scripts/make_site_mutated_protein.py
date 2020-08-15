@@ -1403,17 +1403,17 @@ def main(args):
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
             for s in subs_clean:
-                #if s not in all_substitutions:
+                if s not in all_substitutions:
                     all_substitutions.append(s)
     # Make report names
     if args.report_name:
         main_report_name = join(outdir, args.report_name + '_mutants')
         subs_report_name = join(outdir, args.report_name + '_substitutions')
-        pivot_report_name = join(outidr, args.report_name + '_substitutions_pivot')
+        #pivot_report_name = join(outidr, args.report_name + '_substitutions_pivot')
     else:
         main_report_name = join(outdir, 'mutants_summary')
         subs_report_name = join(outdir, 'substitutions_summary')
-        pivot_report_name = join(outdir, 'pivot_summary')
+        #pivot_report_name = join(outdir, 'pivot_summary')
 
     if args.parallel_partition != [1, 1]:
         main_report_name += '_{1}_of_{0}.csv'.format(*(args.parallel_partition))
@@ -1421,25 +1421,25 @@ def main(args):
     else:
         main_report_name += '.csv'
         subs_report_name += '.csv'
-        pivot_report_name += '.csv'
+        #pivot_report_name += '.csv'
     # Make mutants summary csv
     all_mutants_info.to_csv(main_report_name, index=False)
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
     counts = []
-    all_subs_clean = set(all_substitutions)
-    for sub in all_subs_clean:
-        counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
-    all_subs_info = pd.DataFrame(all_subs_clean)
+    #all_subs_clean = set(all_substitutions)
+    #for sub in all_subs_clean:
+        #counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
+    all_subs_info = pd.DataFrame(all_substitutions)
     all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
     all_subs_info['count'] = counts
     chains = set(all_subs_info['chain'].values.tolist())
     for c in chains:
-        pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
-        subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
+        #pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
+        #subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
     all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
-    subs_pivot.to_csv(pivot_report_name)
+    #subs_pivot.to_csv(pivot_report_name)
 
 
 if __name__ == '__main__':
