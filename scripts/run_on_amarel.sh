@@ -118,16 +118,15 @@ then
 
   for motif_idx in ${!mutant_list[@]}
   do
-    mutant_list[$motif_idx]=${mutant_list[$motif_idx]:0:-20}
+    mutant_list[$motif_idx]=${mutant_list[$motif_idx]:0:-20}"_matched"
   done
 else
   mutant_list[0]=${mutant_list[0]:0:-10}
-  mv ${mutant_list[0]}".fasta.txt" ${mutant_list[0]}"_matched.fasta.txt"
 fi
 
 for motif_idx in ${!mutant_list[@]}
 do
-  total_variants=$(expr `grep -o ">" ${mutant_list[$motif_idx]}"_matched.fasta.txt" | wc -l` - 1)
+  total_variants=$(expr `grep -o ">" ${mutant_list[$motif_idx]}".fasta.txt" | wc -l` - 1)
   if [ -z "${iterations}" ]
   then
     total_jobs=$((${total_variants} * 2 / ${workload} + 1))
@@ -136,9 +135,8 @@ do
   fi
 
   srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
-    python3 ../scripts/split_fasta.py -i ${mutant_list[$motif_idx]}"_matched.fasta.txt" \
+    python3 ../scripts/split_fasta.py -i ${mutant_list[$motif_idx]}".fasta.txt" \
       -n ${total_jobs} -t ${template_pdb}
-  rm ${mutant_list[$motif_idx]}"_matched.fasta.txt"
 
   if ! [ -z "${cut_region_by_chains}" ]
   then
@@ -156,7 +154,7 @@ do
   do
     slurmit.py --job ${protein}_${job_idx} --partition ${partition} --begin now \
       --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-      -m ${mutant_list[$motif_idx]}_matched_${job_idx}.fasta.txt \
+      -m ${mutant_list[$motif_idx]}_${job_idx}.fasta.txt \
       ${cut_region_by_chains[$motif_idx]} -rn ${report_name_prefix}_${job_idx} \
       ${ind_type} ${symmertry} ${membrane} ${protocol} ${iterations} \
       ${repulsive_type} ${rounds} ${only_protein} ${neighborhood_residue} \
