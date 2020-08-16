@@ -880,6 +880,11 @@ def make_mutant_model(ref_pose, substitutions, score_function,
         min_mover.apply(ref_pose)
         mutated_pose = pr.Pose(ref_pose)
     else:
+        for pm in substitutions:
+            native_res = ref_pose.residue(pm[0]).name1()
+            if native_res != pm[1]:
+                raise Exception('The native residue type at pose position ' + \
+                    str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
         # Make a task factory to substitute residues and repack
         tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
             repacking_range=repacking_range, only_protein=only_protein)
