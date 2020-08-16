@@ -1437,7 +1437,7 @@ def main(args):
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
     counts = []
-    all_subs_clean = set(all_substitutions)
+    all_subs_clean = list(set(all_substitutions))
     for sub in all_subs_clean:
         counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
     all_subs_info = pd.DataFrame(all_subs_clean)
