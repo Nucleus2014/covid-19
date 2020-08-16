@@ -28,8 +28,7 @@ elif args.step == 2:
         ddg = line.split(',')[idx]
         if ddg == 'NA':
             ddg = '0.00'
-        ddg = str(round(float(ddg), 2))
-        info += '"' + ddg + '",'
+        info += str(round(float(ddg), 2)) + ','
 elif args.step == 3:
     # Get the wild type score
     wt_scores = list()
