@@ -26,7 +26,7 @@ then
     for ((job_idx=1;job_idx<=total_jobs;job_idx++))
     do
       tail -n +4 ${report_name_prefix}_${job_idx}.ddg >> ${protein}.ddg
-      tail -n ${report_name_prefix}_${job_idx}.fingerprint >> ${protein}.fingerprint
+      cat ${report_name_prefix}_${job_idx}.fingerprint >> ${protein}.fingerprint
     done
   done
 else
@@ -36,7 +36,7 @@ else
   for ((job_idx=2;job_idx<=total_jobs;job_idx++))
   do
     tail -n +2 ${protein}_${job_idx}.ddg >> ${protein}.ddg
-    tail -n ${protein}_${job_idx}.fingerprint >> ${protein}.fingerprint
+    cat ${protein}_${job_idx}.fingerprint >> ${protein}.fingerprint
   done
 fi
 exit
