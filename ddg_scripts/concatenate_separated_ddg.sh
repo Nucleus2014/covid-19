@@ -35,7 +35,7 @@ else
   total_jobs=`ls ${protein}_*.ddg | wc -l`
   for ((job_idx=2;job_idx<=total_jobs;job_idx++))
   do
-    tail -n +2 ${protein}_${job_idx}.ddg >> ${protein}.ddg
+    tail -n +4 ${protein}_${job_idx}.ddg >> ${protein}.ddg
     cat ${protein}_${job_idx}.fingerprint >> ${protein}.fingerprint
   done
 fi
