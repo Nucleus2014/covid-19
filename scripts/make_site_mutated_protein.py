@@ -374,10 +374,10 @@ def get_mutant_brief(point_substitution):
     Returns the typical string summary of a point substitution, such as S328A, 
     which indicates that site 328 mutated from S to A.
     """
-    m =     point_substitution[4] + \
-            point_substitution[1] + \
+    m =     point_substitution[1] + \
             str(point_substitution[0]) + "_" + \
-            point_substitution[2]
+            point_substitution[2] + \
+            point_substitution[4]
 
     return m
 
@@ -1448,12 +1448,12 @@ def main(args):
     all_subs_info = pd.DataFrame(all_subs_clean)
     all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
     all_subs_info['count'] = counts
-    chains = set(all_subs_info['chain'].values.tolist())
-    for c in chains:
+    #chains = set(all_subs_info['chain'].values.tolist())
+    #for c in chains:
         #pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
         #subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
-        chain_subs_info = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
-        chain_subs_info.to_csv(subs_report_name + c)
+        #chain_subs_info = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
+        #chain_subs_info.to_csv(subs_report_name + c)
     all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
     #subs_pivot.to_csv(pivot_report_name)
