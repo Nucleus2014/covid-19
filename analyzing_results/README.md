@@ -1,6 +1,6 @@
-## commands
+# commands
 
-###### load resuls as list
+## load resuls as list
 
 **Point mutations information**
 > python ../../analyzing_results/load_result_as_list.py -i hard-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 1
@@ -18,7 +18,7 @@ If you use *_mutants.csv file to generate *.mut files:
 If you use *_mutants.csv file (probably with some previous output *.ddg files) to generate *.mut files, but the results in the output *.ddg file is not in the correct order:
 > python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -csv hard-rep_hard-rep/Nsp1_mutants.csv -t ddg/Nsp1_cart_INPUT.pdb -o Nsp1_results.txt -s 3
 
-###### draw plots and histograms
+## draw plots and histograms
 **bar plot**
 > python ../../analyzing_results/bar_plot.py -i Nsp1_results.txt -y 4 -t "cart ddG"
 
