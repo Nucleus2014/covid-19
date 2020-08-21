@@ -31,6 +31,7 @@ then
   done
 else
   cp ${protein}_1.ddg ${protein}.ddg
+  cp ${protein}_1.fingerprint ${protein}.fingerprint
 
   total_jobs=`ls ${protein}_*.ddg | wc -l`
   for ((job_idx=2;job_idx<=total_jobs;job_idx++))
