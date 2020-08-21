@@ -1,6 +1,5 @@
 import argparse
 from Bio import SeqUtils
-# from pyrosetta import *
 
 
 def parse_arguments():
@@ -52,6 +51,7 @@ def generate_scores_list_from_ddg(ddg):
 
 
 def generate_list_from_csv_pdb(input_file, csv, pdb):
+    from pyrosetta import *
     info = '['
     init()
     pose = pose_from_pdb(pdb)
