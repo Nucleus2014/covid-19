@@ -21,7 +21,7 @@ then
 
   for motif_idx in ${!mutant_list[@]}
   do
-    report_name_prefix=${protein}_${mutant_list[$motif_idx]:0:-10}
+    report_name_prefix=${protein}_${mutant_list[$motif_idx]:0:-10}_matched
     total_jobs=`ls ${report_name_prefix}_*.ddg | wc -l`
     for ((job_idx=1;job_idx<=total_jobs;job_idx++))
     do
