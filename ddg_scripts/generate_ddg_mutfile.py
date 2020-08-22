@@ -3,13 +3,31 @@ import sys
 from Bio import SeqIO
 import datetime 
 from os import makedirs
-from os.path import isdir, join
+from os.path import isdir, isfile, join
 import pandas as pd
 from pyrosetta import *
 from pyrosetta.rosetta.core.pose import get_chain_from_chain_id, remove_nonprotein_residues, \
     get_chain_id_from_chain
 from pyrosetta.rosetta.core.sequence import SWAligner, Sequence, SimpleScoringScheme
 import re
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--template_pdb', type=str, required=True, 
+        help='Input a starting PDB file for comparison and from which mutants \
+        will be generated.')
+    parser.add_argument('-m', '--mutants_list', type=str, nargs='*', required=True, 
+        help='Input a .fasta list file or files identifying the mutations. For an \
+        oligomer protein, you may want to give multiple input .fasta files \
+        corresponding to different chains in the pdb model. To do this, use space \
+        to separate different .fasta files.')
+    parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
+        help='if multiple fasta files input, cut regions are needed to be defined \
+        in the same order of fasta files order. example: "A C B"')
+    parser.add_argument('-dup', '--duplicated_chains', type=str, nargs='*', 
+        help='Declare if the protein is a symmmetric protein.')
+    return parser.parse_args()
 
 def find(s, ch): # find all characters and return their indices
     return [i for i, ltr in enumerate(s) if ltr == ch]
@@ -356,103 +374,119 @@ def generate_substitutuions(seqrecord, query, pdb_seq, fa_ind, pdb_name, cut_ord
     print("For protein {0}, substitutions are {1}".format(mut_tags['id_1'],new_subs))
     return new_subs, rep_searched
 
+if __name__ == '__main__':
+    args = parse_arguments()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-t', '--template_pdb', type=str, required=True, 
-    help='Input a starting PDB file for comparison and from which mutants \
-    will be generated.')
-parser.add_argument('-m', '--mutants_list', type=str, nargs='*', required=True, 
-    help='Input a .fasta list file or files identifying the mutations. For an \
-    oligomer protein, you may want to give multiple input .fasta files \
-    corresponding to different chains in the pdb model. To do this, use space \
-    to separate different .fasta files.')
-parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
-    help='if multiple fasta files input, cut regions are needed to be defined \
-    in the same order of fasta files order. example: "A C B"')
-args = parser.parse_args()
+    init()
+    wild_pose = pose_from_pdb(args.template_pdb)
+    print("------------------------------")
+    print("Considered FASTA files are:")
+    print(args.mutants_list)
 
-init()
-wild_pose = pose_from_pdb(args.template_pdb)
-print("------------------------------")
-print("Considered FASTA files are:")
-print(args.mutants_list)
+    replicates = check_replicates(args.mutants_list)
 
-replicates = check_replicates(args.mutants_list)
+    #Read all FASTA files. need to combine with check_replicates together further
+    analyze_lists = []
+    wts = []
+    for i in args.mutants_list:
+        fasta_list = parse_fastafile(i)
+        analyze_lists.append(fasta_list[1:])
+        wts.append(fasta_list[0])
+    # get the replicate inds in FASTA files
+    replicate_inds = replicate_seqs(replicates,analyze_lists)
+    print(replicate_inds)
+    
+    # Take subset of fasta list if parallelizing
+    #analyze_list = partition_list(fasta_list[1:], *args.parallel_partition)
+    #print(analyze_list[0])
 
-#Read all FASTA files. need to combine with check_replicates together further
-analyze_lists = []
-wts = []
-for i in args.mutants_list:
-    fasta_list = parse_fastafile(i)
-    analyze_lists.append(fasta_list[1:])
-    wts.append(fasta_list[0])
-# get the replicate inds in FASTA files
-replicate_inds = replicate_seqs(replicates,analyze_lists)
-print(replicate_inds)
- 
-# Take subset of fasta list if parallelizing
-#analyze_list = partition_list(fasta_list[1:], *args.parallel_partition)
-#print(analyze_list[0])
+    #wt = fasta_list[0]
+    # split wild_pose into different parts that are corresponding to cut_regions
+    pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
+    print("Cut regions of the pdb and their start index in the pdb are:")
+    print(pdb_seqs)
 
-#wt = fasta_list[0]
-# split wild_pose into different parts that are corresponding to cut_regions
-pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
-print("Cut regions of the pdb and their start index in the pdb are:")
-print(pdb_seqs)
+    if not args.cut_region_by_chains:
+        args.cut_region_by_chains = list(pdb_seqs.keys())[0]
 
-if not args.cut_region_by_chains:
-    args.cut_region_by_chains = list(pdb_seqs.keys())[0]
-
-# Iterate through all identified fasta sequences, altering protease model
-all_mutants_info = pd.DataFrame([])
-all_substitutions = []
-replicates_searched = []
-protein_name = args.template_pdb[:args.template_pdb.find('_')]
-for c in range(len(args.mutants_list)):
-    fingerprint_file_list = list()
-    total_mutations = 0
-    mut_file_list = list()
-    for n, mutant in enumerate(analyze_lists[c]):
-        if read_name_tag(mutant.id)['id_1'] not in replicates_searched:
-            pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
-            new_subs, replicates_searched = generate_substitutuions(mutant, wts, pdb_seqs, {args.cut_region_by_chains[c]: c}, \
-                args.template_pdb, args.cut_region_by_chains, replicate_inds, replicates, replicates_searched)
-            # Fingerprint for wild type or mutated variants
-            fingerprint = str()
-            # Only calculate mutated variants in Cartesian ddG
-            if len(new_subs) > 0:
-                # Append all point mutations of the variant to mutfile
-                mut_list = list()
-                for pm in new_subs:
-                    native_res = wild_pose.residue(pm[0]).name1()
-                    if native_res != pm[1]:
-                        raise Exception('The native residue type at pose position ' + str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
-                    fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
-                    mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
-                    total_mutations += 1
-                mut_file_list.append(mut_list)
+    # Iterate through all identified fasta sequences, altering protease model
+    all_mutants_info = pd.DataFrame([])
+    all_substitutions = []
+    replicates_searched = []
+    protein_name = args.template_pdb[:args.template_pdb.find('_')]
+    # loop of fasta files
+    for c in range(len(args.mutants_list)):
+        fingerprint_file_list = list()
+        total_mutations = 0
+        mut_file_list = list()
+        # loop of variants
+        for n, mutant in enumerate(analyze_lists[c]):
+            if read_name_tag(mutant.id)['id_1'] not in replicates_searched:
+                pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
+                new_subs, replicates_searched = generate_substitutuions(mutant, wts, \
+                    pdb_seqs, {args.cut_region_by_chains[c]: c}, args.template_pdb, \
+                    args.cut_region_by_chains, replicate_inds, replicates, replicates_searched)
+                # Fingerprint for wild type or mutated variants
+                fingerprint = str()
+                # Only calculate mutated variants in Cartesian ddG
+                if len(new_subs) > 0:
+                    # Append all point mutations of the variant to mutfile
+                    mut_list = list()
+                    # loop of point mutations
+                    for pm in new_subs:
+                        native_res = wild_pose.residue(pm[0]).name1()
+                        if native_res != pm[1]:
+                            raise Exception('The native residue type at pose position ' + \
+                                str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
+                        fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
+                        mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
+                        total_mutations += 1
+                        # duplicate point mutations if has symmetric chains
+                        if args.duplicated_chains:
+                            res_pdb_info = list(filter(lambda x: x != '', wild_pose.pdb_info().\
+                                pose2pdb(pm[0]).split(' ')))
+                            if res_pdb_info[1] != args.duplicated_chains[0]:
+                                raise Exception('The assigned main chain ' + args.duplicated_chains[0] + \
+                                    ' is different from the fasta sequence alignment chain ' + \
+                                    res_pdb_info[1] + '!')
+                            for duplicated_chain in args.duplicated_chains[1:]:
+                                duplicated_point_mutation_pose_index = wild_pose.pdb_info().\
+                                    pdb2pose(duplicated_chain, int(res_pdb_info[0]))
+                                fingerprint += pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2] + ','
+                                mut_list.append(pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2])
+                    # end of loop of point mutations
+                    mut_file_list.append(mut_list)
+                else:
+                    fingerprint += 'WT,'
+                fingerprint_file_list.append(fingerprint[:-1] + '\n')
             else:
-                fingerprint += 'WT,'
-            fingerprint_file_list.append(fingerprint[:-1] + '\n')
-        else:
-            print("Replicate that is already detected!. Skip this round of mutation.")
-    # Single .fasta.txt file or multiple XXX_matched_0.fasta.txt files
-    if args.mutants_list[c].split('_')[-2] != 'matched' or len(args.mutants_list) > 1:
-        last_idx = args.mutants_list[c].rfind('_')
-        prefix = protein_name + '_' + args.mutants_list[c][last_idx + 1:-10]
-    else: # Single XXX_matched_n.fasta.txt file, n > 0
-        prefix = protein_name + '_' + args.mutants_list[c][:-10]
-    if len(fingerprint_file_list) > 0:
-        # Append point mutation information of all variants to the fingerprint file
-        p_fingerprint = open(prefix + '.fingerprint', 'a+')
-        p_fingerprint.writelines(fingerprint_file_list)
-        p_fingerprint.close()
-    if len(mut_file_list) > 0:
-        # Write out to mutfile (here the mutant_list file name ends with the job index)
-        p_mut = open(prefix + '.mut', 'a+')
-        p_mut.write('total ' + str(total_mutations) + '\n')
-        for mut_list in mut_file_list:
-            p_mut.write(str(len(mut_list)) + '\n')
-            for mut in mut_list:
-                p_mut.write(mut + '\n')
-        p_mut.close()
+                print("Replicate that is already detected!. Skip this round of mutation.")
+        # end of loop of variants
+        # Single .fasta.txt file or multiple XXX_matched_0.fasta.txt files
+        if args.mutants_list[c].split('_')[-2] != 'matched' or len(args.mutants_list) > 1:
+            last_idx = args.mutants_list[c].rfind('_')
+            prefix = protein_name + '_' + args.mutants_list[c][last_idx + 1:-10]
+        else: # Single XXX_matched_n.fasta.txt file, n > 0
+            prefix = protein_name + '_' + args.mutants_list[c][:-10]
+        # fingerprint file would not be generated if all variants in current fasta file are matched to other fasta files
+        if len(fingerprint_file_list) > 0:
+            if isfile(prefix + '.fingerprint'):
+                raise Exception('Fingerprint file ' + prefix + '.fingerprint is conflicted with an existing file!')
+            # Write point mutation information of all variants to the fingerprint file
+            p_fingerprint = open(prefix + '.fingerprint', 'w+')
+            p_fingerprint.writelines(fingerprint_file_list)
+            p_fingerprint.close()
+        # mutfile would not be generated if all variants in current fasta file are wild type 
+        # or all variants in current fasta file are matched to other fasta files
+        if len(mut_file_list) > 0:
+            if isfile(prefix + '.mut'):
+                raise Exception('Mutfile ' + prefix + '.mut is conflicted with an existing file!')
+            # Write out to mutfile (here the mutant_list file name ends with the job index)
+            p_mut = open(prefix + '.mut', 'w+')
+            p_mut.write('total ' + str(total_mutations) + '\n')
+            for mut_list in mut_file_list:
+                p_mut.write(str(len(mut_list)) + '\n')
+                for mut in mut_list:
+                    p_mut.write(mut + '\n')
+            p_mut.close()
+    # end of loop of fasta files
