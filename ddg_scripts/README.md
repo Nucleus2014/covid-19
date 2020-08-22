@@ -4,7 +4,7 @@
 1) Generate the pre-minimized .pdb file and get the best decoy
 > sbatch ../scripts/run_cart_min.sh Orf6_Reference.pdb (put cart2.script in the ../scripts directory)
 
-python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
+> python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
 
 2) Generate .mut and .fingerprint files
 > ../scripts/generate_mutfile.sh -tp Orf6_cart.pdb -ml Orf6_GISAID.fasta.txt -ite 3 -wl 20 -part p_sdk94_1
@@ -22,7 +22,7 @@ python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
 1) Generate the pre-minimized .pdb file and get the best decoy
 > sbatch ../scripts/run_cart_min.sh Nsp10-Nsp16_Reference.pdb (put cart2.script in the ../scripts directory)
 
-python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
+> python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
 
 2) Generate .mut and .fingerprint files
 > ../scripts/generate_mutfile.sh -tp Nsp10-Nsp16_cart.pdb -ml Nsp16_GISAID.fasta.txt,Nsp10_GISAID.fasta.txt -cut A,B -ite 3 -wl 20 -part p_sdk94_1
@@ -41,7 +41,7 @@ since the order of the variants in 2 matched_0.fasta.txt files follows the order
 1) Generate the pre-minimized .pdb file and get the best decoy
 > sbatch ../scripts/run_cart_min_symm.sh Nsp5_Reference_INPUT.pdb (put cart2.script in the ../scripts directory)
 
-python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
+> python ../scripts/get_the_lowest_cart_relax_decoy.py -sc score.sc
 
 2) Generate .mut and .fingerprint files
 > ../scripts/generate_mutfile.sh -tp Nsp5_cart.pdb -ml Nsp5_GISAID.fasta.txt -cut A -dup A,B -ite 3 -wl 20 -part p_sdk94_1
