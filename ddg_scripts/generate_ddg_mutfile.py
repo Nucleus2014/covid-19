@@ -409,17 +409,17 @@ if __name__ == '__main__':
     if not args.cut_region_by_chains:
         args.cut_region_by_chains = list(pdb_seqs.keys())[0]
 
-    # Iterate through all identified fasta sequences, altering protease model
+    # Iterate over identified fasta sequences, altering protease model
     all_mutants_info = pd.DataFrame([])
     all_substitutions = []
     replicates_searched = []
     protein_name = args.template_pdb[:args.template_pdb.find('_')]
-    # loop of fasta files
+    # iterate over fasta files
     for c in range(len(args.mutants_list)):
         fingerprint_file_list = list()
         total_mutations = 0
         mut_file_list = list()
-        # loop of variants
+        # iterate over sequences in current fasta file
         for n, mutant in enumerate(analyze_lists[c]):
             if read_name_tag(mutant.id)['id_1'] not in replicates_searched:
                 pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
@@ -432,7 +432,7 @@ if __name__ == '__main__':
                 if len(new_subs) > 0:
                     # Append all point mutations of the variant to mutfile
                     mut_list = list()
-                    # loop of point mutations
+                    # iterate over point mutations
                     for pm in new_subs:
                         native_res = wild_pose.residue(pm[0]).name1()
                         if native_res != pm[1]:
@@ -441,27 +441,25 @@ if __name__ == '__main__':
                         fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
                         mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
                         total_mutations += 1
-                        # duplicate point mutations if has symmetric chains
+                        # duplicate point mutations if has duplicated chains
                         if args.duplicated_chains:
                             res_pdb_info = list(filter(lambda x: x != '', wild_pose.pdb_info().\
                                 pose2pdb(pm[0]).split(' ')))
-                            if res_pdb_info[1] != args.duplicated_chains[0]:
-                                raise Exception('The assigned main chain ' + args.duplicated_chains[0] + \
-                                    ' is different from the fasta sequence alignment chain ' + \
-                                    res_pdb_info[1] + '!')
-                            for duplicated_chain in args.duplicated_chains[1:]:
-                                duplicated_point_mutation_pose_index = wild_pose.pdb_info().\
-                                    pdb2pose(duplicated_chain, int(res_pdb_info[0]))
-                                fingerprint += pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2] + ','
-                                mut_list.append(pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2])
-                    # end of loop of point mutations
+                            # Current point mutation is not matched from other fasta files
+                            if res_pdb_info[1] == args.duplicated_chains[0]:
+                                for duplicated_chain in args.duplicated_chains[1:]:
+                                    duplicated_point_mutation_pose_index = wild_pose.pdb_info().\
+                                        pdb2pose(duplicated_chain, int(res_pdb_info[0]))
+                                    fingerprint += pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2] + ','
+                                    mut_list.append(pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2])
+                    # end of for loop for point mutations
                     mut_file_list.append(mut_list)
                 else:
                     fingerprint += 'WT,'
                 fingerprint_file_list.append(fingerprint[:-1] + '\n')
             else:
                 print("Replicate that is already detected!. Skip this round of mutation.")
-        # end of loop of variants
+        # end of for loop for sequences in current fasta file
         # Single .fasta.txt file or multiple XXX_matched_0.fasta.txt files
         if args.mutants_list[c].split('_')[-2] != 'matched' or len(args.mutants_list) > 1:
             last_idx = args.mutants_list[c].rfind('_')
@@ -489,4 +487,4 @@ if __name__ == '__main__':
                 for mut in mut_list:
                     p_mut.write(mut + '\n')
             p_mut.close()
-    # end of loop of fasta files
+    # end of for loop for fasta files
