@@ -105,6 +105,8 @@ def parse_args():
     parser.add_argument('-cut', '--cut_region_by_chains', type=str, nargs='*', 
         help='if multiple fasta files input, cut regions are needed to be defined \
         in the same order of fasta files order. example: "A C B"')
+    parser.add_argument('-dup', '--duplicated_chains', type=str, nargs='*', 
+        help='Declare if the protein is a symmmetric protein.')
     parser.add_argument('-od', '--out_dir', type=str, 
         help='Input a directory into which the homolog models will be saved. \
         If not specified, PDBs will be saved in the current directory.')
@@ -652,7 +654,7 @@ def coord_constrain_pose(pose):
 
 
 def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=False, 
-    only_protein=False):
+    only_protein=False, duplicated_chains=None, ref_pose=None):
     """
     Input a site_changes list of 3-member tuples, each representing a point 
     substitution in the form output by the compare_sequences function: 
@@ -681,6 +683,20 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
         aa_force.aas_to_keep(pm[2])
         tf.push_back(OperateOnResidueSubset(aa_force, res_selection))
         mutated_res_selection.add_residue_selector(res_selection)
+        # duplicate point mutations if has duplicated chains
+        if duplicated_chains:
+            res_pdb_info = list(filter(lambda x: x != '', ref_pose.pdb_info().\
+                pose2pdb(pm[0]).split(' ')))
+            # Current point mutation is not matched from other fasta files
+            if res_pdb_info[1] == duplicated_chains[0]:
+                for duplicated_chain in duplicated_chains[1:]:
+                    duplicated_point_mutation_pose_index = ref_pose.pdb_info().\
+                        pdb2pose(duplicated_chain, int(res_pdb_info[0]))
+                    res_selection = ResidueIndexSelector(duplicated_point_mutation_pose_index)
+                    aa_force = RestrictAbsentCanonicalAASRLT()
+                    aa_force.aas_to_keep(pm[2])
+                    tf.push_back(OperateOnResidueSubset(aa_force, res_selection))
+                    mutated_res_selection.add_residue_selector(res_selection)
     # Repack some residues to accommodate substitutions
     repack = RestrictToRepackingRLT()
     prevent = PreventRepackingRLT()
@@ -718,7 +734,7 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
 
 
 def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False, 
-    only_protein=False):
+    only_protein=False, duplicated_chains=None, ref_pose=None):
     """
     Written by Zhuofan
     """
@@ -733,6 +749,16 @@ def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False,
         mutated_res_selection = ResidueIndexSelector()
         for pm in site_changes:
             mutated_res_selection.append_index(int(pm[0]))
+            # duplicate point mutations if has duplicated chains
+            if duplicated_chains:
+                res_pdb_info = list(filter(lambda x: x != '', ref_pose.pdb_info().\
+                    pose2pdb(pm[0]).split(' ')))
+                # Current point mutation is not matched from other fasta files
+                if res_pdb_info[1] == duplicated_chains[0]:
+                    for duplicated_chain in duplicated_chains[1:]:
+                        duplicated_point_mutation_pose_index = ref_pose.pdb_info().\
+                            pdb2pose(duplicated_chain, int(res_pdb_info[0]))
+                        mutated_res_selection.append_index(duplicated_point_mutation_pose_index)
         repacking_res_selection = NeighborhoodResidueSelector()
         repacking_res_selection.set_focus_selector(mutated_res_selection)
         repacking_res_selection.set_distance(repacking_range)
@@ -848,7 +874,7 @@ def fast_relax_with_muts(pose, score_function, decoys, task_factory, move_map):
 def make_mutant_model(ref_pose, substitutions, score_function, 
     protocol='repack+min', decoys=1, rounds=1, ex12=True, 
     repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False, no_constraint_scoring=True):
+    debugging_mode=False, no_constraint_scoring=True, duplicated_chains=None):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -887,12 +913,14 @@ def make_mutant_model(ref_pose, substitutions, score_function,
                     str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
         # Make a task factory to substitute residues and repack
         tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein=only_protein)
+            repacking_range=repacking_range, only_protein=only_protein, \
+            duplicated_chains=duplicated_chains, ref_pose=ref_pose)
         if debugging_mode:
             print(tf.create_task_and_apply_taskoperations(ref_pose))
         # Make a task factory for reference pose
         ref_tf = make_ref_pose_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein=only_protein)
+            repacking_range=repacking_range, only_protein=only_protein, \
+            duplicated_chains=duplicated_chains, ref_pose=ref_pose)
         if protocol == 'repack+min':
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_function, decoys, rounds, tf, mm)
@@ -1119,7 +1147,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
     rep_fa_ind=None, replicate_id1=None, rep_searched=None,
     protocol='repack+min', decoys=1, rounds=1, 
     ex12=True, repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False, unconstrain_final_score=True):
+    debugging_mode=False, unconstrain_final_score=True, duplicated_chains=None):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1199,7 +1227,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, sf, query, pdb_seq, fa_ind, pdb_
                 decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
                 only_protein=only_protein, debugging_mode=debugging_mode,
-                no_constraint_scoring=unconstrain_final_score)
+                no_constraint_scoring=unconstrain_final_score, duplicated_chains=duplicated_chains)
         
         # Switch back to a single score function
         if type(sf) is list:
@@ -1391,7 +1419,7 @@ def main(args):
                     rounds=args.rounds, ex12=args.extra_rotamers, \
                     repacking_range=args.neighborhood_residue, backbone=args.backbone, \
                     only_protein=args.only_protein, debugging_mode=args.debugging_mode, \
-                    unconstrain_final_score=args.unconstrain_ddg)
+                    unconstrain_final_score=args.unconstrain_ddg, duplicated_chains=args.duplicated_chains)
             else:
                 print("Replicate that is already detected!. Skip this round of mutation.")
             # Display results for this mutant
