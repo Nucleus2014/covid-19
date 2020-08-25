@@ -5,6 +5,7 @@ do
     -tp) template_pdb="$2";;
     -ml) mutant_list="$2";;
     -cut) cut_region_by_chains="$2";;
+    -dup) duplicated_chains="$2";;
     -ind) ind_type="$2";;
     -sym) symmertry="$2";;
     -mem) membrane="$2";;
@@ -23,9 +24,13 @@ do
 done
 
 IFS=','
-mutant_list=(${mutant_list[@]})
-cut_region_by_chains=(${cut_region_by_chains[@]})
-repulsive_type=(${repulsive_type[@]})
+mutant_list=(${mutant_list[@]}) # convert mutant_list to array
+cut_region_by_chains=(${cut_region_by_chains[@]})  # convert cut_region_by_chains to array
+repulsive_type=(${repulsive_type[@]}) # convert repulsive_type to array
+if ! [ -z "${duplicated_chains}" ]
+then
+  duplicated_chains="-dup "${duplicated_chains[@]} # convert duplicated_chains to string
+fi
 IFS=' '
 
 if ! [ -z "${ind_type}" ]
@@ -98,8 +103,8 @@ protein=${template_pdb%%"_"*}
 
 if [ ${#mutant_list[@]} -gt 1 ]
 then
-  srun -J match_fasta -p ${partition} -t 20:00 \
-    python3 ../scripts/match_fasta_replicates.py -i ${mutant_list[@]}
+  #srun -J match_fasta -p ${partition} -t 20:00 \
+    python3 ../../scripts/match_fasta_replicates.py -i ${mutant_list[@]}
 
   for motif_idx in ${!mutant_list[@]}
   do
@@ -109,8 +114,8 @@ then
   fastas=$( echo ${mutant_list[*]} )
   chains=$( echo ${cut_region_by_chains[*]} )
   slurmit.py --job ${protein}_0 --partition ${partition} --begin now \
-    --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-    -m ${fastas} -cut ${chains} -rn ${protein}_0 ${ind_type} \
+    --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
+    -m ${fastas} -cut ${chains} ${duplicated_chains} -rn ${protein}_0 ${ind_type} \
     ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
     ${rounds} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
     ${debugging_mode} -no_cst_score"
@@ -134,8 +139,8 @@ do
     total_jobs=$((${total_variants} * ${iterations:5} * 2 / ${workload} + 1))
   fi
 
-  srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
-    python3 ../scripts/split_fasta.py -i ${mutant_list[$motif_idx]}".fasta.txt" \
+  #srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
+    python3 ../../scripts/split_fasta.py -i ${mutant_list[$motif_idx]}".fasta.txt" \
       -n ${total_jobs} -t ${template_pdb}
 
   if ! [ -z "${cut_region_by_chains}" ]
@@ -153,9 +158,9 @@ do
   for ((job_idx=1;job_idx<=total_jobs;job_idx++))
   do
     slurmit.py --job ${protein}_${job_idx} --partition ${partition} --begin now \
-      --command "python3 ../scripts/make_site_mutated_protein.py -t ${template_pdb} \
-      -m ${mutant_list[$motif_idx]}_${job_idx}.fasta.txt \
-      ${cut_region_by_chains[$motif_idx]} -rn ${report_name_prefix}_${job_idx} \
+      --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
+      -m ${mutant_list[$motif_idx]}_${job_idx}.fasta.txt ${cut_region_by_chains[$motif_idx]} \
+      ${duplicated_chains} -rn ${report_name_prefix}_${job_idx} \
       ${ind_type} ${symmertry} ${membrane} ${protocol} ${iterations} \
       ${repulsive_type} ${rounds} ${only_protein} ${neighborhood_residue} \
       ${fix_backbone} ${debugging_mode} -no_cst_score"
