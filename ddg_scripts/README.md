@@ -18,6 +18,8 @@
 4) Concatenate all *.ddg and *.fingerprint files:
 > ../scripts/concatenate_saparated_ddg.sh -tp Orf6_cart.pdb -ml Orf6_GISAID.fasta.txt
 
+5) Analyze the output .ddg file. See the analyze_results folder.
+
 **Take hetereodimer Nsp10-Nsp16 as an example:**
 1) Generate the pre-minimized .pdb file and get the best decoy
 > sbatch ../scripts/run_cart_min.sh Nsp10-Nsp16_Reference.pdb (put cart2.script in the ../scripts directory)
@@ -37,6 +39,8 @@ since the order of the variants in 2 matched_0.fasta.txt files follows the order
 4) Concatenate all *.ddg and *.fingerprint files:
 > ../scripts/concatenate_saparated_ddg.sh -tp Nsp10-Nsp16_cart.pdb -ml Nsp16_GISAID.fasta.txt,Nsp10_GISAID.fasta.txt
 
+5) Analyze the output .ddg file. See the analyze_results folder.
+
 **Take homodimer Nsp5 as an example:**
 1) Generate the pre-minimized .pdb file and get the best decoy
 > sbatch ../scripts/run_cart_min_symm.sh Nsp5_Reference_INPUT.pdb (put cart2.script in the ../scripts directory)
@@ -54,3 +58,5 @@ since the order of the variants in 2 matched_0.fasta.txt files follows the order
 
 4) Concatenate all *.ddg and *.fingerprint files:
 > ../scripts/concatenate_saparated_ddg.sh -tp Nsp5_cart.pdb -ml Nsp5_GISAID.fasta.txt
+
+5) Analyze the output .ddg file. See the analyze_results folder.
