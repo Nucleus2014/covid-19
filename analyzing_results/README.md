@@ -23,13 +23,13 @@ If the output *.ddg file is not in the same order as the *.csv file (which would
 For example, if you would like to concatenate results of all four different protocols for Nsp1 protein. You could follow these steps:
 
 1. Print energy scores for all mutation models of **hard-rep_hard-rep** into the file "Nsp1_results.txt":
-* python ../../analyzing_results/load_result_as_list.py -i hard-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
+> python ../../analyzing_results/load_result_as_list.py -i hard-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
 2. Print energy scores for all mutation models of **soft-rep_soft-rep** into the file "Nsp1_results.txt":
-* python ../../analyzing_results/load_result_as_list.py -i soft-rep_soft-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
+> python ../../analyzing_results/load_result_as_list.py -i soft-rep_soft-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
 3. Print energy scores for all mutation models of **soft-rep_hard-rep** into the file "Nsp1_results.txt":
-* python ../../analyzing_results/load_result_as_list.py -i soft-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
+> python ../../analyzing_results/load_result_as_list.py -i soft-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
 4. Print energy scores for all mutation models of **cartesian ddG** into the file "Nsp1_results.txt":
-* python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -f ddg/Nsp1.fingerprint -o Nsp1_results.txt -s 3
+> python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -f ddg/Nsp1.fingerprint -o Nsp1_results.txt -s 3
 
 ## draw plots and histograms
 **bar plot**
