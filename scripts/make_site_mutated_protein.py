@@ -925,12 +925,12 @@ def make_mutant_model(ref_pose, substitutions, score_function,
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_function, decoys, rounds, tf, mm)
             ref_pose = repacking_with_muts_and_minimization(ref_pose, \
-                score_function, decoys, rounds, ref_tf, mm)
+                score_function, 1, rounds, ref_tf, mm)
         elif protocol == 'fastrelax':
             mutated_pose = fast_relax_with_muts(ref_pose, score_function, \
                 decoys, tf, mm)
             ref_pose = fast_relax_with_muts(ref_pose, score_function, \
-                decoys, ref_tf, mm)
+                1, ref_tf, mm)
 
     # Switch back to a single score function
     if type(score_function) is list:
