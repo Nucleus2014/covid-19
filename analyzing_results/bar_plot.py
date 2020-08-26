@@ -16,7 +16,7 @@ with open(args.input_file, 'r') as p_input:
 y_values = eval(lines[args.y_line_index - 1])
 
 x = list(range(len(y_values)))
-plt.bar(x, y_values, width=0.5, color='blue')
+plt.bar(x, sorted(y_values, reverse=True), width=0.5, color='blue')
 
 if args.x_line_index:
     x_ticks = eval(lines[args.x_line_index - 1])
