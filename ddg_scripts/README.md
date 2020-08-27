@@ -16,7 +16,7 @@
 > ../scripts/run_cart_ddg.sh -tp Orf6_cart.pdb -ite 3 -part p_sdk94_1
 
 4) Concatenate all *.ddg and *.fingerprint files:
-> ../scripts/concatenate_saparated_ddg.sh -tp Orf6_cart.pdb -ml Orf6_GISAID.fasta.txt
+> ../scripts/concatenate_separated_ddg.sh -tp Orf6_cart.pdb -ml Orf6_GISAID.fasta.txt
 
 5) Analyze the output .ddg file. See the analyze_results folder.
 
@@ -37,7 +37,7 @@ since the order of the variants in 2 matched_0.fasta.txt files follows the order
 > ../scripts/run_cart_ddg.sh -tp Nsp10-Nsp16_cart.pdb -ite 3 -part p_sdk94_1
 
 4) Concatenate all *.ddg and *.fingerprint files:
-> ../scripts/concatenate_saparated_ddg.sh -tp Nsp10-Nsp16_cart.pdb -ml Nsp16_GISAID.fasta.txt,Nsp10_GISAID.fasta.txt
+> ../scripts/concatenate_separated_ddg.sh -tp Nsp10-Nsp16_cart.pdb -ml Nsp16_GISAID.fasta.txt,Nsp10_GISAID.fasta.txt
 
 5) Analyze the output .ddg file. See the analyze_results folder.
 
@@ -57,6 +57,6 @@ since the order of the variants in 2 matched_0.fasta.txt files follows the order
 > ../scripts/run_cart_ddg.sh -tp Nsp5_cart.pdb -ite 3 -part p_sdk94_1
 
 4) Concatenate all *.ddg and *.fingerprint files:
-> ../scripts/concatenate_saparated_ddg.sh -tp Nsp5_cart.pdb -ml Nsp5_GISAID.fasta.txt
+> ../scripts/concatenate_separated_ddg.sh -tp Nsp5_cart.pdb -ml Nsp5_GISAID.fasta.txt
 
 5) Analyze the output .ddg file. See the analyze_results folder.
