@@ -16,7 +16,7 @@ fi
 
 for mut in `ls *.mut`
 do
-  slurmit.py --job ${template_pdb%%"_"*} --partition ${partition} --begin now \
+  slurmit.py --job ${mut:0:-4} --partition ${partition} --begin now \
     --command "$ROSETTA3/bin/cartesian_ddg.linuxgccrelease -database $ROSETTA3_DB \
     -s ${template_pdb} -ddg:mut_file ${mut} ${iterations} -ddg::cartesian \
     -ddg::dump_pdbs true -ddg::bbnbrs 1 -fa_max_dis 9.0 -score:weights ref2015_cart"
