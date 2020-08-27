@@ -15,7 +15,7 @@ with open(args.input_file, 'r') as p_input:
 # In the "lines" list, line number starts at 0 instead of 1.
 data = eval(lines[args.line_index - 1])
 
-plt.hist(data, bins=1)
+plt.hist(data, bins=args.bins)
 
 plt.xlabel('ddG')
 plt.ylabel('Numbers of variants')
