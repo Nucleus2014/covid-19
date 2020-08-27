@@ -123,9 +123,11 @@ def seq_length_by_chain(wild_pose):
     former_len = 0
     for chain in range(1,wild_pose.num_chains()+1):
         chain_name = get_chain_from_chain_id(chain, wild_pose)
-        chain_seq = Pose(wild_pose, wild_pose.chain_begin(chain), wild_pose.chain_end(chain)).chain_sequence(chain)
+        chain_seq = wild_pose.chain_sequence(chain)
         if chain_name in wild_seqs.keys():
-            wild_seqs[chain_name][0] += Pose(wild_pose, wild_pose.chain_begin(chain), wild_pose.chain_end(chain)).sequence()
+            wild_seqs[chain_name][0] += wild_pose.chain_sequence(chain)
+            #wild_seqs[chain_name][1] += len(chain_seq)
+            #former_len += len(chain_seq)
         else:
             wild_seqs[chain_name] = []
             wild_seqs[chain_name].append(chain_seq)
@@ -146,19 +148,11 @@ def cut_by_chain(wild_pose, cut, list_fasta_names):
     #if len(list_fasta_name) > 1:
     if cut:
         chain_seqs = seq_length_by_chain(wild_pose)
-        print(chain_seqs)
         try:
             if len(cut) == len(list_fasta_names):
                 for re in cut:
                     chain = get_chain_id_from_chain(re, tmp_pose)
-                    align_ind = 0
-                    true_start_ind = chain_seqs[re][1]
-                    pseudo_chain_seq = chain_seqs[re][0]
-                    while pseudo_chain_seq[align_ind] != tmp_pose.residue(tmp_pose.chain_begin(chain)).name1():
-                        true_start_ind += 1
-                        pseudo_chain_seq  = pseudo_chain_seq[1:]
-                    print(pseudo_chain_seq)
-                    wild_seqs[re] = [Pose(tmp_pose, tmp_pose.chain_begin(chain), tmp_pose.chain_end(chain)).sequence(), true_start_ind]
+                    wild_seqs[re] = [tmp_pose.chain_sequence(chain), chain_seqs[re][1]]                   
         except TypeError:
             print("Invalid cut regions specified! Please add '-cut' flag or make sure the number \
             of regions are the same as the number of FASTA files! Be caution to place regions in order \
@@ -442,10 +436,18 @@ if __name__ == '__main__':
                     for pm in new_subs:
                         native_res = wild_pose.residue(pm[0]).name1()
                         if native_res != pm[1]:
-                            raise Exception('The native residue type at pose position ' + \
+                            print('The native residue type at pose position ' + \
                                 str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
-                        fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
-                        mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
+                            native_res_2 = wild_pose.residue(pm[0] + 1).name1()
+                            if native_res_2 == pm[1]:
+                                fingerprint += pm[1] + ' ' + str(pm[0] + 1) + ' ' + pm[2] + ','
+                                mut_list.append(pm[1] + ' ' + str(pm[0] + 1) + ' ' + pm[2])
+                            else:
+                                raise Exception('The native residue type at pose position ' + \
+                                    str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
+                        else:
+                            fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
+                            mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
                         total_mutations += 1
                         # duplicate point mutations if has duplicated chains
                         if args.duplicated_chains:
