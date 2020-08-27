@@ -1,8 +1,7 @@
 import argparse
-import sys
 from Bio import SeqIO
-import datetime 
-from os import makedirs
+import datetime
+from os import makedirs, remove
 from os.path import isdir, isfile, join
 import pandas as pd
 from pyrosetta import *
@@ -10,6 +9,7 @@ from pyrosetta.rosetta.core.pose import Pose, get_chain_from_chain_id, remove_no
     get_chain_id_from_chain
 from pyrosetta.rosetta.core.sequence import SWAligner, Sequence, SimpleScoringScheme
 import re
+import sys
 
 
 def parse_arguments():
@@ -477,23 +477,42 @@ if __name__ == '__main__':
             prefix = protein_name + '_' + args.mutants_list[c][:-10]
         # fingerprint file would not be generated if all variants in current fasta file are matched to other fasta files
         if len(fingerprint_file_list) > 0:
-            if isfile(prefix + '.fingerprint'):
-                raise Exception('Fingerprint file ' + prefix + '.fingerprint is conflicted with an existing file!')
             # Write point mutation information of all variants to the fingerprint file
-            p_fingerprint = open(prefix + '.fingerprint', 'w+')
+            p_fingerprint = open(prefix + '.fingerprint', 'a+')
             p_fingerprint.writelines(fingerprint_file_list)
             p_fingerprint.close()
         # mutfile would not be generated if all variants in current fasta file are wild type 
         # or all variants in current fasta file are matched to other fasta files
         if len(mut_file_list) > 0:
-            if isfile(prefix + '.mut'):
-                raise Exception('Mutfile ' + prefix + '.mut is conflicted with an existing file!')
             # Write out to mutfile (here the mutant_list file name ends with the job index)
-            p_mut = open(prefix + '.mut', 'w+')
-            p_mut.write('total ' + str(total_mutations) + '\n')
-            for mut_list in mut_file_list:
-                p_mut.write(str(len(mut_list)) + '\n')
-                for mut in mut_list:
-                    p_mut.write(mut + '\n')
-            p_mut.close()
+            if isfile(prefix + '.mut'):
+                # Read the original mutfile
+                p_mut = open(prefix + '.mut', 'r')
+                mut_list_bak = p_mut.readlines()
+                p_mut.close()
+                # Remove the original mutfile
+                remove(prefix + '.mut')
+                # Calculate original total number of the point mutations
+                total_mutations_old = int(mut_list_bak[0].split(' ')[1][:-1])
+                # Rewrite the mutfile
+                p_mut = open(prefix + '.mut', 'w+')
+                # Calculate current total number of the point mutations
+                total_mutations += total_mutations_old
+                p_mut.write('total ' + str(total_mutations) + '\n')
+                # Write the original part
+                p_mut.writelines(mut_list_bak[1:])
+                # Write current parts
+                for mut_list in mut_file_list:
+                    p_mut.write(str(len(mut_list)) + '\n')
+                    for mut in mut_list:
+                        p_mut.write(mut + '\n')
+                p_mut.close()
+            else:
+                p_mut = open(prefix + '.mut', 'w+')
+                p_mut.write('total ' + str(total_mutations) + '\n')
+                for mut_list in mut_file_list:
+                    p_mut.write(str(len(mut_list)) + '\n')
+                    for mut in mut_list:
+                        p_mut.write(mut + '\n')
+                p_mut.close()
     # end of for loop for fasta files
