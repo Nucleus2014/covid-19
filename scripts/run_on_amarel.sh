@@ -134,9 +134,9 @@ do
   total_variants=$(expr `grep -o ">" ${mutant_list[$motif_idx]}".fasta.txt" | wc -l` - 1)
   if [ -z "${iterations}" ]
   then
-    total_jobs=$((${total_variants} * 2 / ${workload} + 1))
+    total_jobs=$(((${total_variants} + 1) / ${workload} + 1))
   else
-    total_jobs=$((${total_variants} * ${iterations:5} * 2 / ${workload} + 1))
+    total_jobs=$(((${total_variants} + 1) * ${iterations:5} * 2 / ${workload} + 1))
   fi
 
   #srun -J split_${mutant_list[$motif_idx]} -p ${partition} -t 20:00 \
