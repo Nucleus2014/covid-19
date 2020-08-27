@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 import pyrosetta as pr
 from pyrosetta.rosetta.core.chemical import ResidueProperty
-from pyrosetta.rosetta.core.pose import get_chain_from_chain_id, remove_nonprotein_residues, \
+from pyrosetta.rosetta.core.pose import Pose, get_chain_from_chain_id, remove_nonprotein_residues, \
     get_chain_id_from_chain
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
@@ -1087,11 +1087,9 @@ def seq_length_by_chain(wild_pose):
     former_len = 0
     for chain in range(1,wild_pose.num_chains()+1):
         chain_name = get_chain_from_chain_id(chain, wild_pose)
-        chain_seq = wild_pose.chain_sequence(chain)
+        chain_seq = Pose(wild_pose, wild_pose.chain_begin(chain), wild_pose.chain_end(chain)).sequence()
         if chain_name in wild_seqs.keys():
-            wild_seqs[chain_name][0] += wild_pose.chain_sequence(chain)
-            #wild_seqs[chain_name][1] += len(chain_seq)
-            #former_len += len(chain_seq)
+            wild_seqs[chain_name][0] += Pose(wild_pose, wild_pose.chain_begin(chain), wild_pose.chain_end(chain)).sequence()
         else:
             wild_seqs[chain_name] = []
             wild_seqs[chain_name].append(chain_seq)
@@ -1112,11 +1110,19 @@ def cut_by_chain(wild_pose, cut, list_fasta_names):
     #if len(list_fasta_name) > 1:
     if cut:
         chain_seqs = seq_length_by_chain(wild_pose)
+        print(chain_seqs)
         try:
             if len(cut) == len(list_fasta_names):
                 for re in cut:
                     chain = get_chain_id_from_chain(re, tmp_pose)
-                    wild_seqs[re] = [tmp_pose.chain_sequence(chain), chain_seqs[re][1]]                   
+                    align_ind = 0
+                    true_start_ind = chain_seqs[re][1]
+                    pseudo_chain_seq = chain_seqs[re][0]
+                    while pseudo_chain_seq[align_ind] != tmp_pose.residue(tmp_pose.chain_begin(chain)).name1():
+                        true_start_ind += 1
+                        pseudo_chain_seq  = pseudo_chain_seq[1:]
+                    print(pseudo_chain_seq)
+                    wild_seqs[re] = [Pose(tmp_pose, tmp_pose.chain_begin(chain), tmp_pose.chain_end(chain)).sequence(), true_start_ind]                   
         except TypeError:
             print("Invalid cut regions specified! Please add '-cut' flag or make sure the number \
             of regions are the same as the number of FASTA files! Be caution to place regions in order \
