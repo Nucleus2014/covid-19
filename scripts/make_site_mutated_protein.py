@@ -1291,11 +1291,8 @@ def main(args):
     opts = '-mute all -run:preserve_header'
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
-    if args.repulsive_type:
-        if args.protocol == 'fastrelax':
+    if args.repulsive_type and args.protocol == 'fastrelax':
             args.repulsive_type = None
-        else:
-            opts += ' -beta'
     if args.protocol == 'repack+min':
         opts += ' -fa_max_dis 9.0'
     pr.init(opts)
@@ -1313,22 +1310,16 @@ def main(args):
 
     # Setting score functions of different repulsive type is
     # not compatible with using a membrane score function.
-    # The franklin2019 option will override beta_soft/ref2015_cst
+    # The franklin2019 option will override ref2015_soft/ref2015_cst
     if args.membrane:
         base_sf_wts = 'franklin2019'
     elif args.repulsive_type:
-        if len(args.repulsive_type) == 1:
-            if args.repulsive_type[0] == 'soft':
-                base_sf_wts = 'beta_soft'
-            elif args.repulsive_type[0] == 'hard':
-                base_sf_wts = 'ref2015_cst'
-        else:
-            base_sf_wts = list()
-            for rep_type in args.repulsive_type:
-                if rep_type == 'soft':
-                    base_sf_wts.append('beta_soft')
-                elif rep_type == 'hard':
-                    base_sf_wts.append('ref2015_cst')
+        base_sf_wts = list()
+        for rep_type in args.repulsive_type:
+            if rep_type == 'soft':
+                base_sf_wts.append('ref2015_soft')
+            elif rep_type == 'hard':
+                base_sf_wts.append('ref2015_cst')
     else:
         base_sf_wts = 'ref2015_cst'
 
