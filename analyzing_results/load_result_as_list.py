@@ -1,5 +1,6 @@
-import argparse
+import argparse, sys
 from Bio import SeqUtils
+from pyrosetta import *
 
 
 def parse_arguments():
@@ -51,7 +52,6 @@ def generate_scores_list_from_ddg(ddg):
 
 
 def generate_list_from_csv_pdb(input_file, csv, pdb):
-    from pyrosetta import *
     info = '['
     init()
     pose = pose_from_pdb(pdb)
@@ -111,11 +111,16 @@ def generate_list_from_fingerprint(input_file, fingerprint):
             else:
                 key = 'MUT'
                 mutations = line[:-1].split(',')
+                mut_order = {}
                 for mutation in mutations:
                     mutantion_info = mutation.split(' ')
                     pose_index = mutantion_info[1]
                     mutated_res = SeqUtils.IUPACData.protein_letters_1to3[mutantion_info[2]].upper()
-                    key += '_' + pose_index + mutated_res
+                    mut_order[pose_index] = mutated_res
+                keys = [int(x) for x in mut_order.keys()]
+                for keys in sorted(keys):
+                    key += '_' + str(keys) + mut_order[str(keys)] 
+                #key += '_' + pose_index + mutated_res
                 ddg = ddg_variants_dict[key]
                 info += str(round(ddg, 2)) + ','
     info = info[:-1] + ']\n'
