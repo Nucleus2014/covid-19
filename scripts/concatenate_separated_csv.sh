@@ -25,8 +25,8 @@ then
     total_jobs=`ls ${report_name_prefix}_*_mutants.csv | wc -l`
     for ((job_idx=1;job_idx<=total_jobs;job_idx++))
     do
-      tail -n +2 ${report_name_prefix}_${job_idx}_mutants.csv >> ${protein}_mutants.csv
-      tail -n +2 ${report_name_prefix}_${job_idx}_substitutions.csv >> ${protein}_substitutions.csv
+      tail -n +2 ${report_name_prefix}_matched_${job_idx}_mutants.csv >> ${protein}_mutants.csv
+      tail -n +2 ${report_name_prefix}_matched_${job_idx}_substitutions.csv >> ${protein}_substitutions.csv
     done
   done
 else
