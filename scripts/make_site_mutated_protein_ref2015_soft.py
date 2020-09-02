@@ -937,8 +937,7 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
                 1, ref_tf, mm)
 
     # Switch back to a single score function
-    if type(score_function) is list:
-        score_function = score_function[0]
+    score_function = score_functions[1]
 
     # Initialize data collection dict
     mutated_pose_data = {}
