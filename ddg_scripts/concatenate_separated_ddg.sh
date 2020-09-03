@@ -8,6 +8,9 @@ do
   esac; shift 2
 done
 
+# Convert all ddg files in current directory into ddg2 files
+python3 ../../scripts/convert_ddg_to_ddg2.py
+
 protein=${template_pdb%%"_"*}
 
 if [[ "${mutant_list}" == *","* ]]
@@ -16,7 +19,7 @@ then
   mutant_list=(${mutant_list[@]})
   IFS=' '
 
-  cp ${protein}_0.ddg ${protein}.ddg
+  cp ${protein}_0.ddg2 ${protein}.ddg
   cp ${protein}_0.fingerprint ${protein}.fingerprint
 
   for motif_idx in ${!mutant_list[@]}
@@ -25,18 +28,18 @@ then
     total_jobs=`ls ${report_name_prefix}_*.fingerprint | wc -l`
     for ((job_idx=1;job_idx<=total_jobs;job_idx++))
     do
-      tail -n +4 ${report_name_prefix}_${job_idx}.ddg >> ${protein}.ddg
+      cat ${report_name_prefix}_${job_idx}.ddg2 >> ${protein}.ddg
       cat ${report_name_prefix}_${job_idx}.fingerprint >> ${protein}.fingerprint
     done
   done
 else
-  cp ${protein}_1.ddg ${protein}.ddg
+  cp ${protein}_1.ddg2 ${protein}.ddg
   cp ${protein}_1.fingerprint ${protein}.fingerprint
 
   total_jobs=`ls ${protein}_*.fingerprint | wc -l`
   for ((job_idx=2;job_idx<=total_jobs;job_idx++))
   do
-    tail -n +4 ${protein}_${job_idx}.ddg >> ${protein}.ddg
+    cat ${protein}_${job_idx}.ddg2 >> ${protein}.ddg
     cat ${protein}_${job_idx}.fingerprint >> ${protein}.fingerprint
   done
 fi

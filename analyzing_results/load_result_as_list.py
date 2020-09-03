@@ -1,6 +1,6 @@
 import argparse, sys
 from Bio import SeqUtils
-from pyrosetta import *
+# from pyrosetta import *
 
 
 def parse_arguments():
@@ -14,42 +14,14 @@ def parse_arguments():
     return parser.parse_args()
 
 def generate_scores_dict_from_ddg(ddg):
-    with open(ddg, 'r') as p2ddg:
-        lines = p2ddg.readlines()
-    # Obtain the wild type score
-    wt_decoy_scores = list()
-    for i in range(3):
-        wt_decoy_scores.append(float(list(filter(lambda x: x != '', lines[i].split(' ')))[3]))
-    wt_score = min(wt_decoy_scores)
-    # Obtain scores of each variant
     variants = dict()
-    for i in range(3, len(lines), 3):
-        variant_name = list(filter(lambda x: x != '', lines[i].split(' ')))[2][:-1]
-        decoy_scores = list()
-        for j in range(3):
-            decoy_scores.append(float(list(filter(lambda x: x != '', lines[i + j].split(' ')))[3]))
-        ddg = min(decoy_scores) - wt_score
-        variants[variant_name] = ddg
+    with open(ddg, 'r') as p_ddg:
+        for line in p_ddg:
+            data = list(filter(lambda x: x != '', line.split(' ')))
+            name = data[0]
+            ddg = data[1][:-1]
+            variants[name] = ddg
     return variants
-
-def generate_scores_list_from_ddg(ddg):
-    with open(ddg, 'r') as p2ddg:
-        lines = p2ddg.readlines()
-    # Obtain the wild type score
-    wt_decoy_scores = list()
-    for i in range(3):
-        wt_decoy_scores.append(float(list(filter(lambda x: x != '', lines[i].split(' ')))[3]))
-    wt_score = min(wt_decoy_scores)
-    # Obtain scores of each variant
-    variants = list()
-    for i in range(3, len(lines), 3):
-        decoy_scores = list()
-        for j in range(3):
-            decoy_scores.append(float(list(filter(lambda x: x != '', lines[i + j].split(' ')))[3]))
-        ddg = min(decoy_scores) - wt_score
-        variants.append(ddg)
-    return variants
-
 
 def generate_list_from_csv_pdb(input_file, csv, pdb):
     info = '['
@@ -80,26 +52,6 @@ def generate_list_from_csv_pdb(input_file, csv, pdb):
     info = info[:-1] + ']\n'
     return info
 
-def generate_list_from_csv(input_file, csv):
-    info = '['
-    with open(csv, 'r') as p2csv:
-        csv_lines = p2csv.readlines()
-    for idx, item in enumerate(csv_lines[0].split(',')):
-        if item == 'substitutions':
-            break
-    # Calculate ddG
-    ddg_variants_list = generate_scores_list_from_ddg(input_file)
-    diff = 0
-    for i, csv_line in enumerate(csv_lines[1:]):
-        mutations = csv_line.split(',')[idx] # 'AI559_V;AP585_S'
-        if mutations == '':
-            info += '0,'
-            diff += 1
-        else:
-            info += str(round(ddg_variants_list[i - diff], 2)) + ','
-    info = info[:-1] + ']\n'
-    return info
-
 def generate_list_from_fingerprint(input_file, fingerprint):
     info = '['
     # Calculate ddG
@@ -120,9 +72,7 @@ def generate_list_from_fingerprint(input_file, fingerprint):
                 keys = [int(x) for x in mut_order.keys()]
                 for keys in sorted(keys):
                     key += '_' + str(keys) + mut_order[str(keys)] 
-                #key += '_' + pose_index + mutated_res
-                ddg = ddg_variants_dict[key]
-                info += str(round(ddg, 2)) + ','
+                info += ddg_variants_dict[key] + ','
     info = info[:-1] + ']\n'
     return info
 
@@ -156,10 +106,7 @@ elif args.step == 2:
     info = info[:-1] + ']\n'
 elif args.step == 3:
     if args.csv_file:
-        if args.pdb:
-            info = generate_list_from_csv_pdb(args.input_file, args.csv_file, args.template_pdb)
-        else:
-            info = generate_list_from_csv(args.input_file, args.csv_file)
+        info = generate_list_from_csv_pdb(args.input_file, args.csv_file, args.template_pdb)
     elif args.fingerprint_file:
         info = generate_list_from_fingerprint(args.input_file, args.fingerprint_file)
 
