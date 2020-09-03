@@ -13,6 +13,7 @@ Concatenate all energy information or point mutations information into a single 
 **Cartesian ddG**
 
 > python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -f ddg/Nsp1.fingerprint -o Nsp1_results.txt -s 3
+
 or
 > python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -csv hard-rep_hard-rep/Nsp1_mutants.csv -t ddg/Nsp1_cart_INPUT.pdb -o Nsp1_results.txt -s 3
 
