@@ -11,13 +11,9 @@ Concatenate all energy information or point mutations information into a single 
 > python ../../analyzing_results/load_result_as_list.py -i hard-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 2
 
 **Cartesian ddG**
-If you use *.fasta files to generate *.mut files and *.fingerprint files:
+
 > python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -f ddg/Nsp1.fingerprint -o Nsp1_results.txt -s 3
-
-If you use *_mutants.csv file to generate *.mut files:
-> python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -csv hard-rep_hard-rep/Nsp1_mutants.csv -o Nsp1_results.txt -s 3
-
-If the output *.ddg file is not in the same order as the *.csv file (which would not happen if run the pipeline correctly):
+or
 > python ../../analyzing_results/load_result_as_list.py -i ddg/Nsp1.ddg -csv hard-rep_hard-rep/Nsp1_mutants.csv -t ddg/Nsp1_cart_INPUT.pdb -o Nsp1_results.txt -s 3
 
 For example, if you would like to concatenate results of all four different protocols for Nsp1 protein. You could follow these steps:
