@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--input_file', type=str, required=True)
 parser.add_argument('-data', '--line_index', type=int, required=True)
-parser.add_argument('-bins', '--bins', type=float, default=1)
+parser.add_argument('-bins', '--bins', type=int, default=1)
 parser.add_argument('-t', '--title', type=str)
 parser.add_argument('-o', '--output_prefix', type=str)
 args = parser.parse_args()
