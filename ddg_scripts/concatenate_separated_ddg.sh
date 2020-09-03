@@ -8,6 +8,9 @@ do
   esac; shift 2
 done
 
+# Convert all ddg files in current directory into ddg2 files
+python3 ../../scripts/convert_ddg_to_ddg2.py
+
 protein=${template_pdb%%"_"*}
 
 if [[ "${mutant_list}" == *","* ]]
