@@ -1,6 +1,6 @@
 import argparse, sys
 from Bio import SeqUtils
-from pyrosetta import *
+# from pyrosetta import *
 
 
 def parse_arguments():
