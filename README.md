@@ -63,6 +63,6 @@ Here is a update recording for the pipeline of generating mutations for covid-19
 
 
 
-## More information please go to the [log for developing pipeline and scripts](https://github.com/Nucleus2014/covid-19/blob/master/Log_covid-19_pipeline.md)
+## More history information please go to the [log for developing pipeline and scripts](https://github.com/Nucleus2014/covid-19/blob/master/Log_covid-19_pipeline.md)
 
 
