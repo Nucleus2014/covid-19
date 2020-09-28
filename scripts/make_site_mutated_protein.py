@@ -891,11 +891,12 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
     if len(substitutions) == 0:
         # If there is no mutation (i.e., the reference sequence), just 
         # run a minimization. Otherwise run both repacking and minimization.
+        modified_ref_pose = pr.Pose(ref_pose)
         min_mover = MinMover()
         min_mover.score_function(score_functions[1])
         min_mover.movemap(mm)
-        min_mover.apply(ref_pose)
-        mutated_pose = pr.Pose(ref_pose)
+        min_mover.apply(modified_ref_pose)
+        mutated_pose = pr.Pose(modified_ref_pose)
     else:
         # Double check the point mutation informations
         corrections_to_substitutions = dict()
@@ -928,12 +929,12 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
         if protocol == 'repack+min':
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_functions, decoys, rounds, tf, mm)
-            ref_pose = repacking_with_muts_and_minimization(ref_pose, \
+            modified_ref_pose = repacking_with_muts_and_minimization(ref_pose, \
                 score_functions, 1, rounds, ref_tf, mm)
         elif protocol == 'fastrelax':
             mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
                 decoys, tf, mm)
-            ref_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
+            modified_ref_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
                 1, ref_tf, mm)
 
     # Switch back to a single score function
@@ -951,12 +952,12 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
         score_function.set_weight(ScoreType.dihedral_constraint, 0.0)
     
     # Add energy change to output data
-    wt_energy = total_energy(ref_pose, score_function)
+    wt_energy = total_energy(modified_ref_pose, score_function)
     mutant_energy = total_energy(mutated_pose, score_function)
     mutated_pose_data['energy_change'] = mutant_energy - wt_energy
 
     # Add RMSD to output data
-    mutated_pose_data['rmsd'] = get_rmsd(ref_pose, mutated_pose)
+    mutated_pose_data['rmsd'] = get_rmsd(modified_ref_pose, mutated_pose)
 
     return mutated_pose, mutated_pose_data
 
