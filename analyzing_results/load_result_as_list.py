@@ -1,7 +1,7 @@
 import argparse, sys
 from Bio import SeqUtils
-# from pyrosetta import *
-
+from pyrosetta import *
+from statistics import mean
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -19,35 +19,48 @@ def generate_scores_dict_from_ddg(ddg):
         for line in p_ddg:
             data = list(filter(lambda x: x != '', line.split(' ')))
             name = data[0]
-            ddg = data[1][:-1]
-            variants[name] = ddg
+            ddg = float(data[1][:-1])
+            try:
+                variants[name].append(ddg)
+            except:
+                variants[name] = [ddg]
+    for name in variants.keys():
+        variants[name] = str(round(mean(variants[name]), 2))
     return variants
 
 def generate_list_from_csv_pdb(input_file, csv, pdb):
     info = '['
     init()
     pose = pose_from_pdb(pdb)
-    with open(csv, 'r') as p2csv:
-        csv_lines = p2csv.readlines()
-    for idx, item in enumerate(lines[0].split(',')):
+    with open(csv, 'r') as p_csv:
+        csv_lines = p_csv.readlines()
+    for idx, item in enumerate(csv_lines[0].split(',')):
         if item == 'substitutions':
             break
     # Calculate ddG
     ddg_variants_dict = generate_scores_dict_from_ddg(input_file)
     for csv_line in csv_lines[1:]:
-        mutations = csv_line.split(',')[idx] # 'AI559_V;AP585_S'
+        mutations = csv_line.split(',')[idx] # P323_LA;W617_LA;T643_IA;F49_LC
         if mutations == '':
             info += '0,'
         else:
-            key = 'MUT'
+            ddg_variants_dict_key = 'MUT'
+            mut_order = dict()
             for mutation in mutations.split(';'):
-                chain_id = mutation[0]
+                chain_id = mutation[-1]
                 # native_aa = mutation[1]
-                mutated_res = SeqUtils.IUPACData.protein_letters_1to3[mutation[-1]].upper()
-                pdb_index = int(mutation[2:-2])
+                mutated_res = SeqUtils.IUPACData.protein_letters_1to3[mutation[-2]].upper()
+                pdb_index = int(mutation[1:-3])
                 pose_index = pose.pdb_info().pdb2pose(chain_id, pdb_index)
-                key += '_' + pose_index + mutated_res
-            ddg = ddg_variants_dict[key]
+                if pose_index != 0:
+                    pdb_res_name = pose.residue(pose_index).name1()
+                    if mutation[-2] != pdb_res_name:
+                        raise Exception('Point mutation does not match! ')
+                    mut_order[str(pose_index)] = mutated_res
+            keys = [int(x) for x in mut_order.keys()]
+            for key in sorted(keys):
+                ddg_variants_dict_key += '_' + str(key) + mut_order[str(key)]
+            ddg = ddg_variants_dict[ddg_variants_dict_key]
             info += str(round(ddg, 2)) + ','
     info = info[:-1] + ']\n'
     return info
@@ -61,18 +74,18 @@ def generate_list_from_fingerprint(input_file, fingerprint):
             if line.startswith('WT'):
                 info += '0,'
             else:
-                key = 'MUT'
+                ddg_variants_dict_key = 'MUT'
+                mut_order = dict()
                 mutations = line[:-1].split(',')
-                mut_order = {}
                 for mutation in mutations:
                     mutantion_info = mutation.split(' ')
                     pose_index = mutantion_info[1]
                     mutated_res = SeqUtils.IUPACData.protein_letters_1to3[mutantion_info[2]].upper()
                     mut_order[pose_index] = mutated_res
                 keys = [int(x) for x in mut_order.keys()]
-                for keys in sorted(keys):
-                    key += '_' + str(keys) + mut_order[str(keys)] 
-                info += ddg_variants_dict[key] + ','
+                for key in sorted(keys):
+                    ddg_variants_dict_key += '_' + str(key) + mut_order[str(key)]
+                info += ddg_variants_dict[ddg_variants_dict_key] + ','
     info = info[:-1] + ']\n'
     return info
 

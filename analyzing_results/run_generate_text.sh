@@ -1,0 +1,1 @@
+python ../../analyzing_results/generate_text.py -i ${protein_name}_results.txt -idx 5 -thld 10 -o ${protein_name}_Cart_ddG
