@@ -848,19 +848,20 @@ def fast_relax_with_muts(pose, score_function, decoys, task_factory, move_map):
     Written by Zhuofan
     """
     # Make FastRelax mover
-    fast_relax = FastRelax()
+    fast_relax = FastRelax(decoys)
     fast_relax.set_scorefxn(score_function)
     fast_relax.set_task_factory(task_factory)
     fast_relax.set_movemap(move_map)
+    mutated_pose = fast_relax.apply(pose)
 
-    for decoy in range(decoys):
-        pose_copy = pr.Pose(pose)
-        fast_relax.apply(pose_copy)
-        current_energy = total_energy(pose_copy, score_function)
+    # for decoy in range(decoys):
+    #     pose_copy = pr.Pose(pose)
+    #     fast_relax.apply(pose_copy)
+    #     current_energy = total_energy(pose_copy, score_function)
 
-        if decoy == 0 or current_energy < lowest_energy:
-            lowest_energy = current_energy
-            mutated_pose = pose_copy
+    #     if decoy == 0 or current_energy < lowest_energy:
+    #         lowest_energy = current_energy
+    #         mutated_pose = pose_copy
 
     return mutated_pose
 
@@ -938,28 +939,31 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
                 1, ref_tf, mm)
 
     # Switch back to a single score function
-    score_function = score_functions[1].clone()
+    score_function = score_functions[1]
 
     # Initialize data collection dict
     mutated_pose_data = {}
 
-    # Remove constraint weights from score functions for scoring
+    # Rescore the poses
+    wt_energy = score_function(modified_ref_pose)
+    mutant_energy = score_function(mutated_pose)
+
+    # Remove constraint weights from total energy
     if no_constraint_scoring:
-        score_function.set_weight(ScoreType.chainbreak, 0.0)
-        score_function.set_weight(ScoreType.coordinate_constraint, 0.0)
-        score_function.set_weight(ScoreType.atom_pair_constraint, 0.0)
-        score_function.set_weight(ScoreType.angle_constraint, 0.0)
-        score_function.set_weight(ScoreType.dihedral_constraint, 0.0)
+        cst_type = ScoreType.coordinate_constraint
+        coord_wt = score_function.get_weight(ScoreType.coordinate_constraint)
+        wild_cst = modified_ref_pose.energies().total_energies().get(cst_type)
+        wt_energy = wt_energy - wild_cst * coord_wt
+        mutant_cst = mutated_pose.energies().total_energies().get(cst_type)
+        mutant_energy = mutant_energy - mutant_cst * coord_wt
     
     # Add energy change to output data
-    wt_energy = total_energy(modified_ref_pose, score_function)
-    mutant_energy = total_energy(mutated_pose, score_function)
     mutated_pose_data['energy_change'] = mutant_energy - wt_energy
 
     # Add RMSD to output data
     mutated_pose_data['rmsd'] = get_rmsd(modified_ref_pose, mutated_pose)
 
-    return mutated_pose, mutated_pose_data
+    return modified_ref_pose, mutated_pose, mutated_pose_data
 
 ########## Collecting Model Data ###############################################
 
@@ -1233,7 +1237,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     # If the mutant model is being made, the subsequent steps should use the 
     # Mutant model for increased accuracy, so that step is performed here
     if make_model:
-        mutated_pose, mut_pose_info = \
+        modified_ref_pose, mutated_pose, mut_pose_info = \
             make_mutant_model(ref_pose, new_subs, score_functions, protocol=protocol, 
                 decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
@@ -1253,40 +1257,110 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
             mut_tags['rmsd'] = 'NA'
 
         # Set future calculations to use the mutated pose
-        pose = mutated_pose.clone()
+        ref_pose_copy = pr.Pose(ref_pose)
     else:
         mutated_pose = None
-        pose = ref_pose.clone()
+        ref_pose_copy = pr.Pose(ref_pose)
     # Add substitution layer to output data
-    layers = [identify_res_layer(pose, pm[0], main_chain=list(fa_ind.values())[0]+1) 
+    layers = [identify_res_layer(ref_pose_copy, pm[0], main_chain=list(fa_ind.values())[0]+1) 
         for pm in new_subs]
     mut_tags['layer'] = ';'.join(layers)
 
     # Add whether multiple substitutions are interacting to output data
-    mut_tags['coevolution'] = check_coevolution(pose, sf, new_subs)
+    mut_tags['coevolution'] = check_coevolution(ref_pose_copy, sf, new_subs)
 
     # Add whether substitutions are near multi-chain interface to output data
     if oligo_chains:
-        interface_checks = [check_interface_proximity(pose, sf, pm[0], 
+        interface_checks = [check_interface_proximity(ref_pose_copy, sf, pm[0], 
             sym_chains, main_chain=main_chain) for pm in new_subs]
         mut_tags['near_interface'] = ';'.join([str(i) for i in interface_checks])
 
     # Add whether substitutions are near catalytic residues to output data
     if cat_res:
-        cat_checks = [check_catalytic_proximity(pose, sf, pm[0], cat_res)
+        cat_checks = [check_catalytic_proximity(ref_pose_copy, sf, pm[0], cat_res)
             for pm in new_subs]
         mut_tags['near_catalytic'] = ';'.join([str(i) for i in cat_checks])
 
     # Add whether substitutions are near substrate to output data
     if substrate_chains:
-        substrate_checks = [check_interface_proximity(pose, sf, pm[0], 
+        substrate_checks = [check_interface_proximity(ref_pose_copy, sf, pm[0], 
             substrate_chains, main_chain=main_chain) for pm in new_subs]
         mut_tags['near_substrate'] = ';'.join([str(i) for i in substrate_checks])
 
     # Convert to a DataFrame
     mut_df = pd.DataFrame(mut_tags, index=[1])
 
-    return mut_df, mutated_pose, substitutions, new_subs, replicate_id1, rep_searched
+    return modified_ref_pose, mut_df, mutated_pose, substitutions, new_subs, replicate_id1, rep_searched
+
+########## Main ###########################################################         
+
+def get_sf(rep_type, symmetry=False, membrane=False, constrain=True):
+    assert rep_type in ['hard', 'soft']
+    if symmetry: # Declare symmetric score functions
+        score_function = SymmetricScoreFunction()
+        if rep_type == 'hard':
+            if membrane:
+                score_function.add_weights_from_file('franklin2019')
+            else:
+                score_function.add_weights_from_file('ref2015')
+        elif rep_type == 'soft':
+            if membrane: # Set up a soft-rep version of franklin2019 manually
+                score_function.add_weights_from_file('ref2015_soft')
+                score_function.set_weight(ScoreType.fa_water_to_bilayer, 1.0)
+            else:
+                score_function.add_weights_from_file('ref2015_soft')
+    else: # Declare ordinary score functions
+        if rep_type == 'hard':
+            if membrane:
+                score_function = pr.create_score_function('franklin2019')
+            else:
+                score_function = pr.create_score_function('ref2015')
+        elif rep_type == 'soft':
+            if membrane: # Set up a soft-rep version of franklin2019 manually
+                score_function = pr.create_score_function('ref2015_soft')
+                score_function.set_weight(ScoreType.fa_water_to_bilayer, 1.0)
+            else:
+                score_function = pr.create_score_function('ref2015_soft')
+    # The score functions do not have constraint weights incorporated in 
+    # themselves. If requisite, the constraint weights are added.
+    if constrain:
+        score_function.set_weight(ScoreType.atom_pair_constraint, 1.0)
+        score_function.set_weight(ScoreType.coordinate_constraint, 1.0)
+        score_function.set_weight(ScoreType.angle_constraint, 1.0)
+        score_function.set_weight(ScoreType.dihedral_constraint, 1.0)
+        score_function.set_weight(ScoreType.metalbinding_constraint, 1.0)
+        score_function.set_weight(ScoreType.chainbreak, 1.0)
+        score_function.set_weight(ScoreType.res_type_constraint, 1.0)
+        
+    return score_function
+
+def get_pose(pdb, symmetry=None, membrane=None, constrain=True):
+    """
+    Returns a pose from a PDB. 
+    If a symmetry file is given, applies symmetry. 
+    If a span file is given, applies membrane.
+    """
+    pose = pr.pose_from_file(pdb)
+    
+    # Applying symmetry if specified
+    if symmetry: 
+        sfsm = SetupForSymmetryMover(symmetry)
+        sfsm.apply(pose)
+            
+    # Set up membrane for membrane protein
+    if membrane:
+        if symmetry:
+            add_memb = pr.rosetta.protocols.membrane.symmetry.SymmetricAddMembraneMover(membrane)
+            add_memb.apply(pose)
+        else:
+            add_memb = pr.rosetta.protocols.membrane.AddMembraneMover(membrane)
+            add_memb.apply(pose)
+            
+    # Apply constraints
+    if constrain:
+        pose = coord_constrain_pose(pose)
+    
+    return pose
 
 ########## Executing ###########################################################         
 
@@ -1307,61 +1381,11 @@ def main(args):
 
     score_functions = list()
     for rep_type in args.repulsive_type:
-        if args.symmetry: # Declare symmetric score functions
-            score_function = SymmetricScoreFunction()
-            if rep_type == 'hard':
-                if args.membrane:
-                    score_function.add_weights_from_file('franklin2019')
-                else:
-                    score_function.add_weights_from_file('ref2015')
-            elif rep_type == 'soft':
-                if args.membrane: # Set up a soft-rep version of franklin2019 manually
-                    score_function.add_weights_from_file('ref2015_soft')
-                    score_function.set_weight(ScoreType.fa_water_to_bilayer, 1.0)
-                else:
-                    score_function.add_weights_from_file('ref2015_soft')
-        else: # Declare ordinary score functions
-            if rep_type == 'hard':
-                if args.membrane:
-                    score_function = pr.create_score_function('franklin2019')
-                else:
-                    score_function = pr.create_score_function('ref2015')
-            elif rep_type == 'soft':
-                if args.membrane: # Set up a soft-rep version of franklin2019 manually
-                    score_function = pr.create_score_function('ref2015_soft')
-                    score_function.set_weight(ScoreType.fa_water_to_bilayer, 1.0)
-                else:
-                    score_function = pr.create_score_function('ref2015_soft')
-        # The score functions do not have constraint weights incorporated in 
-        # themselves. If requisite, the constraint weights are added.
-        if args.constrain:
-            score_function.set_weight(ScoreType.atom_pair_constraint, 1.0)
-            score_function.set_weight(ScoreType.coordinate_constraint, 1.0)
-            score_function.set_weight(ScoreType.angle_constraint, 1.0)
-            score_function.set_weight(ScoreType.dihedral_constraint, 1.0)
-            score_function.set_weight(ScoreType.metalbinding_constraint, 1.0)
-            score_function.set_weight(ScoreType.chainbreak, 1.0)
-            score_function.set_weight(ScoreType.res_type_constraint, 1.0)
+        score_function = get_sf(rep_type, symmetry=args.symmetry, membrane=args.membrane, constrain=args.constrain)
         score_functions.append(score_function)
-    # End of the for loop for score functions
 
     # Load protein model
-    wild_pose = pr.pose_from_pdb(args.template_pdb)
-
-    if args.symmetry: # Applying symmetry if specified
-        sfsm = SetupForSymmetryMover(args.symmetry)
-        sfsm.apply(wild_pose)
-        if args.membrane: # Set up membrane for membrane protein
-            add_memb = pr.rosetta.protocols.membrane.symmetry.SymmetricAddMembraneMover(args.span_file)
-            add_memb.apply(wild_pose)
-    else:
-        if args.membrane: # Set up membrane for membrane protein
-            add_memb = pr.rosetta.protocols.membrane.AddMembraneMover(args.span_file)
-            add_memb.apply(wild_pose)
-
-    # Apply constraints
-    if args.constrain:
-        wild_pose = coord_constrain_pose(wild_pose)
+    wild_pose = get_pose(args.template_pdb, symmetry=args.symmetry, membrane=args.span_file, constrain=args.constrain)
 
     # Read fasta sequences
     # edited by Changpeng
@@ -1405,8 +1429,8 @@ def main(args):
         for n, mutant in enumerate(analyze_lists[c]):
             if read_name_tag(mutant.id)['id_1'] not in replicates_searched: 
                 ref_pose = pr.Pose(wild_pose)
-                single_mutant_info, mutated_pose, substitutions, new_subs, replicate_inds, \
-                    replicates_searched = \
+                modified_ref_pose, single_mutant_info, mutated_pose, substitutions, new_subs, \
+                    replicate_inds, replicates_searched = \
                     analyze_mutant_protein(mutant, ref_pose, score_functions, wts, pdb_seqs, 
                     {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, 
                     make_model=args.make_models, main_chain=args.main_chain, 
@@ -1441,6 +1465,7 @@ def main(args):
                 str_mut_sum = '-'.join(mut_summary)
                 outname = '{}_{}_{}.pdb'.format(tag, first_id, str_mut_sum)
                 outname = join(outdir, outname)
+                modified_ref_pose.dump_pdb(outname[:-4] + '_ref.pdb')
                 mutated_pose.dump_pdb(outname)
 
             # Append individual mutant data to aggregate
