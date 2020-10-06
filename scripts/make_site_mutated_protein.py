@@ -1238,7 +1238,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     pdb_index_match_mutant=False, cut_order=None, rep_fa_ind=None, 
     replicate_id1=None, rep_searched=None, protocol='repack+min', decoys=1, 
     rounds=1, ex12=True, repacking_range=False, backbone=True, 
-    only_protein=False, debugging_mode=False, unconstrain_final_score=True, 
+    only_protein=False, unconstrain_final_score=True, 
     duplicated_chains=None, coveloution_method='distance'):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
@@ -1317,7 +1317,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
             make_mutant_model(ref_pose, new_subs, score_functions, 
                 protocol=protocol, decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
-                only_protein=only_protein, debugging_mode=debugging_mode,
+                only_protein=only_protein, 
                 no_constraint_scoring=unconstrain_final_score, 
                 duplicated_chains=duplicated_chains)
         
@@ -1609,7 +1609,6 @@ def main(args):
                         repacking_range=args.neighborhood_residue, 
                         backbone=args.backbone, 
                         only_protein=args.only_protein, 
-                        debugging_mode=args.debugging_mode, 
                         unconstrain_final_score=args.unconstrain_ddg, 
                         duplicated_chains=args.duplicated_chains, 
                         coveloution_method=args.coveloution_method)
