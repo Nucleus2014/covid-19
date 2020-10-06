@@ -156,7 +156,9 @@ def parse_args():
         soft-rep score function for repacking and minimization, respectively.')
     parser.add_argument('-rnd', '--rounds', type=int, default=1, 
         help='The rounds of repacking and minimization calculations being repeated \
-        in one trajectory..')
+        in one trajectory.')
+    parser.add_argument('-rep_wts', '--repulsive_weights', type=float, nargs='*', \
+        default=None, help='Ramping Lennard-Jones repulsive weight in each rounds.')
     parser.add_argument('-no_ex', '--extra_rotamers', action='store_false', 
         help='Giving a flag of -no_ex will prevent using extra rotamer \
         sampling during repacking, saving a lot of time with reduced sampling.')
@@ -700,8 +702,8 @@ def coord_constrain_pose(pose):
     return pose
 
 
-def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=False, 
-    only_protein=False, duplicated_chains=None, ref_pose=None):
+def make_point_mutant_task_factory(input_pose, site_changes, ex12=True, repacking_range=False, 
+    only_protein=False, duplicated_chains=None):
     """
     Input a site_changes list of 3-member tuples, each representing a point 
     substitution in the form output by the compare_sequences function: 
@@ -729,12 +731,12 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
         mutated_res_selection.add_residue_selector(res_selection)
         # duplicate point mutations if has duplicated chains
         if duplicated_chains:
-            res_pdb_info = list(filter(lambda x: x != '', ref_pose.pdb_info().\
+            res_pdb_info = list(filter(lambda x: x != '', input_pose.pdb_info().\
                 pose2pdb(pm[0]).split(' ')))
             # Current point mutation is not matched from other fasta files
             if res_pdb_info[1] == duplicated_chains[0]:
                 for duplicated_chain in duplicated_chains[1:]:
-                    duplicated_point_mutation_pose_index = ref_pose.pdb_info().\
+                    duplicated_point_mutation_pose_index = input_pose.pdb_info().\
                         pdb2pose(duplicated_chain, int(res_pdb_info[0]))
                     res_selection = ResidueIndexSelector(duplicated_point_mutation_pose_index)
                     aa_force = RestrictAbsentCanonicalAASRLT()
@@ -777,8 +779,8 @@ def make_point_mutant_task_factory(site_changes, ex12=True, repacking_range=Fals
     return tf
 
 
-def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False, 
-    only_protein=False, duplicated_chains=None, ref_pose=None):
+def make_ref_pose_task_factory(input_pose, site_changes, ex12=True, repacking_range=False, 
+    only_protein=False, duplicated_chains=None):
     """
     Written by Zhuofan
     """
@@ -795,12 +797,12 @@ def make_ref_pose_task_factory(site_changes, ex12=True, repacking_range=False,
             mutated_res_selection.append_index(int(pm[0]))
             # duplicate point mutations if has duplicated chains
             if duplicated_chains:
-                res_pdb_info = list(filter(lambda x: x != '', ref_pose.pdb_info().\
+                res_pdb_info = list(filter(lambda x: x != '', input_pose.pdb_info().\
                     pose2pdb(pm[0]).split(' ')))
                 # Current point mutation is not matched from other fasta files
                 if res_pdb_info[1] == duplicated_chains[0]:
                     for duplicated_chain in duplicated_chains[1:]:
-                        duplicated_point_mutation_pose_index = ref_pose.pdb_info().\
+                        duplicated_point_mutation_pose_index = input_pose.pdb_info().\
                             pdb2pose(duplicated_chain, int(res_pdb_info[0]))
                         mutated_res_selection.append_index(duplicated_point_mutation_pose_index)
         repacking_res_selection = NeighborhoodResidueSelector()
@@ -845,8 +847,9 @@ def make_move_map(pose, backbone, only_protein):
     return move_map
 
 
-def repacking_with_muts_and_minimization(pose, score_functions, decoys, 
-    rounds, task_factory, move_map):
+def repacking_with_muts_and_minimization(pose, score_functions, decoys, rounds, 
+    repulsive_weights, is_ref_pose, site_changes, ex12=True, repacking_range=False, 
+    only_protein=False, duplicated_chains=None, backbone=True):
     """
     Applies point mutations to a given pose. This is done through a 
     PackRotamersMover, followed by minimization.
@@ -854,28 +857,54 @@ def repacking_with_muts_and_minimization(pose, score_functions, decoys,
     site_changes is a list of point_mutation objects
     Modified by Zhuofan.
     """
-    # Repacking
-    prm = PackRotamersMover()
-    prm.score_function(score_functions[0])
-    prm.task_factory(task_factory)
-
-    # Minimization after repacking
+    # Set up a repacker
+    pack_rotamer_mover = PackRotamersMover()
+    # Set up a flexible backbone or fixed backbone minimizer
     min_mover = MinMover()
-    min_mover.score_function(score_functions[1])
+    min_mover.min_type('lbfgs_armijo_nonmonotone')
+    move_map = make_move_map(pose, backbone, only_protein)
     min_mover.movemap(move_map)
     min_mover.min_type('lbfgs_armijo_nonmonotone')
     
+    # Repeating the whole protocol for n decoys and get the best decoy.
     for decoy in range(decoys):
         # Make a copy Pose
         pose_copy = pr.Pose(pose)
-        for rnd in range(rounds):
-            # Apply the PackRotamersMover
-            prm.apply(pose_copy)
-            # Apply the MinMover to the modified Pose
-            min_mover.apply(pose_copy)
-        # Get current energy
-        current_energy = total_energy(pose_copy, score_functions[1])
+        
+        # Create a task factory for each copy of the pose object
+        if is_ref_pose: # Make a task factory for reference pose
+            task_factory = make_ref_pose_task_factory(pose_copy, site_changes, \
+                ex12=ex12, repacking_range=repacking_range, only_protein=only_protein, \
+                duplicated_chains=duplicated_chains)
+        else: # Make a task factory to substitute residues and repack
+            task_factory = make_point_mutant_task_factory(pose_copy, site_changes, \
+                ex12=ex12, repacking_range=repacking_range, only_protein=only_protein, \
+                duplicated_chains=duplicated_chains)
+        # print(task_factory.create_task_and_apply_taskoperations(pose))
+        # Set the task factory for the repacker.
+        pack_rotamer_mover.task_factory(task_factory)
 
+        # Repeating repacking and minimization for n rounds.
+        for rnd in range(rounds):
+            # Set score functions for the repacker and minimizer.
+            if repulsive_weights: # Set fa_rep weight.
+                repacking_score_function = score_functions[0].clone()
+                repacking_score_function.set_weight(ScoreType.fa_rep, repulsive_weights[rnd])
+                pack_rotamer_mover.score_function(repacking_score_function)
+                minimization_score_function = score_functions[1].clone()
+                minimization_score_function.set_weight(ScoreType.fa_rep, repulsive_weights[rnd])
+                min_mover.score_function(minimization_score_function)
+            else: # Use the default fa_rep weight.
+                pack_rotamer_mover.score_function(score_functions[0])
+                min_mover.score_function(score_functions[1])
+            
+            # Apply the PackRotamersMover
+            pack_rotamer_mover.apply(pose_copy)
+            # Apply the MinMover
+            min_mover.apply(pose_copy)
+        
+        # Save the best decoy.
+        current_energy = total_energy(pose_copy, score_functions[1])
         if decoy == 0 or current_energy < lowest_energy:
             lowest_energy = current_energy
             mutated_pose = pose_copy
@@ -883,35 +912,54 @@ def repacking_with_muts_and_minimization(pose, score_functions, decoys,
     return mutated_pose
 
 
-def fast_relax_with_muts(pose, score_function, decoys, task_factory, move_map):
+def fast_relax_with_muts(pose, score_function, decoys, is_ref_pose, site_changes, 
+    ex12=True, repacking_range=False, only_protein=False, duplicated_chains=None, 
+    backbone=True):
     """
     Applies point mutations to a given pose. This is done through a 
     Fast Relax Mover.
     Written by Zhuofan
     """
-    # Make FastRelax mover
-    fast_relax = FastRelax(decoys)
+    # Set up a FastRelax mover. Set repeating trajectories to 1.
+    fast_relax = FastRelax(1)
     fast_relax.set_scorefxn(score_function)
-    fast_relax.set_task_factory(task_factory)
+    move_map = make_move_map(pose, backbone, only_protein)
     fast_relax.set_movemap(move_map)
-    mutated_pose = fast_relax.apply(pose)
 
-    # for decoy in range(decoys):
-    #     pose_copy = pr.Pose(pose)
-    #     fast_relax.apply(pose_copy)
-    #     current_energy = total_energy(pose_copy, score_function)
+    # Repeating the FastRelax protocol for n decoys and get the best decoy.
+    for decoy in range(decoys):
+        # Make a copy Pose
+        pose_copy = pr.Pose(pose)
+        
+        # Create a task factory for each copy of the pose object
+        if is_ref_pose: # Make a task factory for reference pose
+            task_factory = make_ref_pose_task_factory(pose_copy, site_changes, \
+                ex12=ex12, repacking_range=repacking_range, only_protein=only_protein, \
+                duplicated_chains=duplicated_chains)
+        else: # Make a task factory to substitute residues and repack
+            task_factory = make_point_mutant_task_factory(pose_copy, site_changes, \
+                ex12=ex12, repacking_range=repacking_range, only_protein=only_protein, \
+                duplicated_chains=duplicated_chains)
+        # print(task_factory.create_task_and_apply_taskoperations(pose))
+        # Set the task factory for the FastRelax mover.
+        fast_relax.set_task_factory(task_factory)
 
-    #     if decoy == 0 or current_energy < lowest_energy:
-    #         lowest_energy = current_energy
-    #         mutated_pose = pose_copy
+        # Apply the FastRelax mover.
+        fast_relax.apply(pose_copy)
+
+        # Save the best decoy.
+        current_energy = total_energy(pose_copy, score_function)
+        if decoy == 0 or current_energy < lowest_energy:
+            lowest_energy = current_energy
+            mutated_pose = pose_copy
 
     return mutated_pose
 
 
 def make_mutant_model(ref_pose, substitutions, score_functions, 
-    protocol='repack+min', decoys=1, rounds=1, ex12=True, 
-    repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False, no_constraint_scoring=True, duplicated_chains=None):
+    protocol='repack+min', decoys=1, rounds=1, repulsive_weights=None, 
+    ex12=True, repacking_range=False, backbone=True, only_protein=False, 
+    no_constraint_scoring=True, duplicated_chains=None):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -924,20 +972,10 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
     repacking. This increased sampling substantially increases runtime.
     Modified by Zhuofan.
     """
-    # Set up a flexible backbone or fixed backbone movemap
-    mm = make_move_map(ref_pose, backbone, only_protein)
-
-    # Make residue changes
-    if len(substitutions) == 0:
-        # If there is no mutation (i.e., the reference sequence), just 
-        # run a minimization. Otherwise run both repacking and minimization.
+    if len(substitutions) == 0: # No change.
+        mutated_pose = pr.Pose(ref_pose)
         modified_ref_pose = pr.Pose(ref_pose)
-        min_mover = MinMover()
-        min_mover.score_function(score_functions[1])
-        min_mover.movemap(mm)
-        min_mover.apply(modified_ref_pose)
-        mutated_pose = pr.Pose(modified_ref_pose)
-    else:
+    else: # Make residue changes.
         # Double check the point mutation informations
         corrections_to_substitutions = dict()
         for idx, pm in enumerate(substitutions):
@@ -945,37 +983,30 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
             if native_res != pm[1]:
                 raise Exception('The native residue type at pose position ' + \
                     str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
-                # native_res_2 = ref_pose.residue(pm[0] + 1).name1()
-                # if native_res_2 == pm[1]:
-                #     new_point_mutation_info_list = list(pm)
-                #     new_point_mutation_info_list[0] = pm[0] + 1
-                #     corrections_to_substitutions[str(idx)] = tuple(new_point_mutation_info_list)
-                # else:
-                #     raise Exception('The native residue type at pose position ' + \
-                #         str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
         # Possibly make corrections to new_sub
         for idx, new_point_mutation_info_tuple in corrections_to_substitutions.items():
             substitutions[int(idx)] = new_point_mutation_info_tuple
-        # Make a task factory to substitute residues and repack
-        tf = make_point_mutant_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein=only_protein, \
-            duplicated_chains=duplicated_chains, ref_pose=ref_pose)
-        if debugging_mode:
-            print(tf.create_task_and_apply_taskoperations(ref_pose))
-        # Make a task factory for reference pose
-        ref_tf = make_ref_pose_task_factory(substitutions, ex12=ex12, \
-            repacking_range=repacking_range, only_protein=only_protein, \
-            duplicated_chains=duplicated_chains, ref_pose=ref_pose)
+        
         if protocol == 'repack+min':
             mutated_pose = repacking_with_muts_and_minimization(ref_pose, \
-                score_functions, decoys, rounds, tf, mm)
+                score_functions, decoys, rounds, repulsive_weights, True, \
+                substitutions, ex12=ex12, repacking_range=repacking_range, \
+                only_protein=only_protein, duplicated_chains=duplicated_chains, \
+                backbone=backbone)
             modified_ref_pose = repacking_with_muts_and_minimization(ref_pose, \
-                score_functions, 1, rounds, ref_tf, mm)
+                score_functions, 1, rounds, repulsive_weights, False, \
+                substitutions, ex12=ex12, repacking_range=repacking_range, \
+                only_protein=only_protein, duplicated_chains=duplicated_chains, \
+                backbone=backbone)
         elif protocol == 'fastrelax':
-            mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
-                decoys, tf, mm)
-            modified_ref_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
-                1, ref_tf, mm)
+            mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], decoys, \
+                True, substitutions, ex12=ex12, repacking_range=repacking_range, \
+                only_protein=only_protein, duplicated_chains=duplicated_chains, \
+                backbone=backbone)
+            modified_ref_pose = fast_relax_with_muts(ref_pose, score_functions[1], 1, \
+                False, substitutions, ex12=ex12, repacking_range=repacking_range, \
+                only_protein=only_protein, duplicated_chains=duplicated_chains, \
+                backbone=backbone)
 
     # Switch back to a single score function
     score_function = score_functions[1]
@@ -1494,8 +1525,11 @@ def main(args):
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
     # So far we don't allow switching the score function in fast relax
-    if args.repulsive_type and args.protocol == 'fastrelax':
+    if args.protocol == 'fastrelax':
+        if args.repulsive_type:
             args.repulsive_type = None
+        if args.repulsive_weights:
+            args.repulsive_weights = None
     if args.protocol == 'repack+min':
         opts += ' -fa_max_dis 9.0'
     pr.init(opts)
