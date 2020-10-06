@@ -17,13 +17,11 @@ Makes a table of all mutants:
     - Whether there are multiple substitutions
     - If there are multiple substitutions, whether they interact
 Makes structural models of each substituted mutant
-
 Optionally, the step of making the altered models can be omitted. If this option 
 is chosen, the process will be considerably faster, skipping the most 
 time-consuming steps. However, energy differences will not be calculated and the
 potential interaction of mutations will be less accurately calculated from the 
 wild-type model.
-
 Script by Joseph H. Lubin, summer 2020
 jhl133@scarletmail.rutgers.edu
 """
@@ -31,6 +29,7 @@ jhl133@scarletmail.rutgers.edu
 import argparse
 from Bio import SeqIO
 import datetime
+import matplotlib.pyplot as plt
 import numpy as np
 from os import makedirs
 from os.path import isdir, join
@@ -55,6 +54,8 @@ from pyrosetta.rosetta.core.sequence import SWAligner, Sequence, read_fasta_file
     SimpleScoringScheme
 from pyrosetta.rosetta.core.simple_metrics.metrics import \
     InteractionEnergyMetric, RMSDMetric, TotalEnergyMetric
+from pyrosetta.rosetta.core.simple_metrics.per_residue_metrics import \
+    PerResidueEnergyMetric
 from pyrosetta.rosetta.protocols.constraint_generator import \
     AddConstraints, CoordinateConstraintGenerator
 from pyrosetta.rosetta.protocols.membrane import AddMembraneMover
@@ -89,7 +90,6 @@ def parse_args():
         - Whether there are multiple substitutions
         - If there are multiple substitutions, whether they interact
     Makes structural models of each substituted mutant
-
     Optionally, the step of making the altered models can be omitted. If this 
     option is chosen, the process will be considerably faster, skipping the most 
     time-consuming steps. However, energy differences will not be calculated and 
@@ -173,7 +173,12 @@ def parse_args():
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
-                #unconstrain_final_score=args.unconstrain_ddg):
+    parser.add_argument('-coev', '--coveloution_method', type=str, 
+        choices=['energy', 'distance'], default='distance', 
+        help='Whether mutations are a coevolution can be detected in one of two \
+        ways: geometrically, based on the inter-residue distance and \
+        orientation, or energetically, based on whether residues have nonzero \
+        interface scores. Uses geometry by default.')
     parser.add_argument('-no_cst_score', '--unconstrain_ddg', action='store_true', \
         default=False, help="Call this flag to return energies unconstrained")
     parser.add_argument('-no_models', '--make_models', action='store_false', 
@@ -193,6 +198,8 @@ def parse_args():
 ########## Text-based data collection ##########################################
 def find(s, ch): # find all characters and return their indices
     return [i for i, ltr in enumerate(s) if ltr == ch]
+
+
 def convert_date_str(date_str):
     """ 
     Converts a date in the form 'yyyy-mm-dd' to a datetime date object. Hyphens 
@@ -218,7 +225,7 @@ def read_name_tag(fasta_id):
     breakup_id = fasta_id.split('|')
     tag_dict['date_first'] = convert_date_str(breakup_id[0])
     tag_dict['date_last'] = convert_date_str(breakup_id[1])
-    tag_dict['count'] = int(breakup_id[2].split('=')[-1])
+    tag_dict['gisaid_count'] = int(breakup_id[2].split('=')[-1])
     tag_dict['id_1'] = breakup_id[3]
     tag_dict['id_2'] = breakup_id[4]
     tag_dict['location_1'] = breakup_id[3].split('/')[1]
@@ -228,7 +235,8 @@ def read_name_tag(fasta_id):
     return tag_dict
 
 
-def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_match_mutant): #ind_by has two option, pose or pdb
+def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, 
+    is_pdb_index_match_mutant): 
     """
     Given a reference sequence and a comparison sequence, identify the sites 
     where the comparison sequence differs from the reference. Returns a list of 
@@ -237,6 +245,8 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
     substitute residue type. Site numbers are 1-indexed (not 0-indexed as Python 
     default) to work with Rosetta. If the sequences are not the same length, it  
     breaks the script.
+
+    ind_by has two options, pose or pdb
     """
     # Make sure sequences are the same length
     # added by Changpeng, record the start index in pdb file
@@ -245,7 +255,8 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
         for line in fp:
             if line[0:6].strip() == "ATOM":
                 if line[21] == list(pdb_seq.keys())[0]:
-                    start_ind = int(line[22:26].strip()) # record the start index of residues
+                    # record the start index of residues
+                    start_ind = int(line[22:26].strip()) 
                     break
         fp.close()
     elif ind_by == "pose":
@@ -253,7 +264,8 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
     print("Start index in the pdb sequence is:{}".format(start_ind))
 
     # added by Changpeng, do sequence alignment between pdb seq and ref seq
-    wild_seq = list(pdb_seq.values())[0][0] #one chain that matched to fasta,pdb_seq[1] is the start_ind in the wild_pose
+    #one chain that matched to fasta,pdb_seq[1] is the start_ind in the wild_pose
+    wild_seq = list(pdb_seq.values())[0][0] 
     wild_seq_ = Sequence(wild_seq,"pdb")
     len_wild_seq = len(wild_seq)
     chain_name = list(pdb_seq.keys())[0]
@@ -374,17 +386,16 @@ def compare_sequences(pdb_name, pdb_seq, seq_2, query_seq, ind_by, is_pdb_index_
 
 def get_mutant_brief(point_substitution):
     """
-    Input a 3-member tuple representing a point substitution, of the form: 
-    (site, original_AA, substituted_AA)
+    Input a 5-member tuple representing a point substitution, of the form: 
+    (site, original_AA, substituted_AA, whether_site_is_in_pdb, chain)
     Note: this is the output of the compare_sequences function.
 
-    Returns the typical string summary of a point substitution, such as S328A, 
-    which indicates that site 328 mutated from S to A.
+    Returns the typical string summary of a point substitution, such as 
+    A_S328A, which indicates that site 328 on chain A mutated from S to A.
     """
-    m =     point_substitution[1] + \
-            str(point_substitution[0]) + "_" + \
-            point_substitution[2] + \
-            point_substitution[4]
+    template = '{}_{}{}{}'
+    ps = point_substitution
+    m = template.format(ps[4], ps[1], ps[0], ps[2])
 
     return m
 
@@ -394,13 +405,10 @@ def is_conservative(point_substitution):
     Input a 3-member tuple representing a point substitution, of the form: 
     (site, original_AA, substituted_AA)
     Note: this is the output of the compare_sequences function.
-
     Returns a Boolean of whether a change from the first residue to the second
     represents a conservative substitution.
-
     Uses groupings of amino acids from Wikipedia:
     https://en.wikipedia.org/wiki/Amino_acid#/media/File:Amino_Acids.svg
-
     Staying within B, or D will be conservative. 
     Staying withing charge group in A will be conservative. 
     Any special case is nonconservative.
@@ -535,44 +543,80 @@ def interaction_energy(pose, score_function, selection_1, selection_2):
     return interact_metric.calculate(pose)
 
 
-def check_coevolution(pose, score_function, substitutions):
+def check_selection_proximity(pose, selection_1, selection_2):
     """
-    Given a pose and a score function, and a list of substitutions, makes 
-    selectors for the substitution sites and checkes whether the selections
-    have nonzero interaction energy.
-
-    substitutions should be list of 3-member tuples, each representing a point 
-    substitution in the form output by the compare_sequences function: 
-    (site, original_AA, substituted_AA)    
+    Determines whether any residues in one selector are close enough to 
+    potentially interact with residues from a second selector, 
+    using an InterGroupInterfaceByVector selector with default settings.
     """
-    # Make a list of substituted sites
-    substitution_sites = [s[0] for s in substitutions]
+    # Make full-pose selection
+    full_pose = TrueResidueSelector()
+    
+    # Make selection for the full pose minus the first selector
+    not_selection_1 = NotResidueSelector(selection_1)
+    full_minus_1 = selector_intersection(full_pose, not_selection_1)
+    
+    # Make selection for interacting residues between selection 1 the rest of the pose
+    igibv = InterGroupInterfaceByVectorSelector()
+    igibv.group1_selector(selection_1)
+    igibv.group2_selector(full_minus_1)
+    
+    # Find intersection of selector_1's interaction partners and selector_2
+    selection_overlap = selector_intersection(igibv, selection_2)
+    
+    # Check if there are residues in the intersection, or if it is empty
+    # If it is empty, the Boolean will be False. Otherwise, it will be True
+    selections_do_overlap = bool(selector_to_list(pose, selection_overlap))
 
+    return selections_do_overlap
+
+
+def check_coevolution(pose, substitutions, score_function=None):
+    """
+    Given a pose and and a list of substitution sites, makes selectors for the 
+    substitution sites and checkes whether the selections interact. If a score
+    function is given, interaction is defined by having a nonzero interface 
+    energy. If no score function is given, interaction is defined as having CA
+    within 5.5A or within 11A if the CBs are oriented toward each other.
+    """
     # Set output to False unless an interaction is found.
     sites_interact = False
 
     # Automatically no interaction if there are not multiple substitutions
-    if len(substitution_sites) < 2:
+    if len(substitutions) < 2:
         return sites_interact
 
     # Non-redundantly iterate pairwise through the list of substitutions 
     # Skip last res to avoid self-comparison
-    for n, sub1 in enumerate(substitution_sites[:-2]):
+    for n, sub1 in enumerate(substitutions[:-2]):
         # Make selector for first residue 
         res1 = ResidueIndexSelector(str(sub1))
 
         # Iterate through all subsequent substitution sites
-        for sub2 in substitution_sites[n + 1:]:
+        for sub2 in substitutions[n + 1:]:
             # Make selector for second residue 
             res2 = ResidueIndexSelector(str(sub2))
 
-            # Determine interface energy
-            intE = interaction_energy(pose, score_function, res1, res2)
+            # Checking interaction by energy
+            if score_function:
+                # Determine interface energy
+                intE = interaction_energy(pose, score_function, res1, res2)
 
-            # If the energy is nonzero, residues are interacting
-            if intE != 0:
-                sites_interact = True
-                break 
+                # If the energy is nonzero, residues are interacting
+                if intE != 0:
+                    sites_interact = True
+                    break 
+
+            # Checking interaction by geometry
+            else:
+                # Calculating proximity
+                selections_nearby = check_selection_proximity(pose, res1, res2)
+
+                # If selections are nearby, residues are interacting
+                if selections_nearby:
+                    sites_interact = True
+                    break 
+
 
     # When either an interaction is found or when iteration completes, return
     # whether sites interact
@@ -664,13 +708,10 @@ def make_point_mutant_task_factory(input_pose, site_changes, ex12=True, repackin
     Input a site_changes list of 3-member tuples, each representing a point 
     substitution in the form output by the compare_sequences function: 
     (site, original_AA, substituted_AA)
-
     Generates a TaskFactory to repack all residues in a pose with the 
     altered sites repacking to the new sequence.
-
     The ex12 option perform extra sampling ar chi 1 and chi 2 when 
     repacking. This increased sampling substantially increases runtime.
-
     Modified by Zhuofan
     """
     # Make TaskFactory to input changes
@@ -823,6 +864,7 @@ def repacking_with_muts_and_minimization(pose, score_functions, decoys, rounds,
     min_mover.min_type('lbfgs_armijo_nonmonotone')
     move_map = make_move_map(pose, backbone, only_protein)
     min_mover.movemap(move_map)
+    min_mover.min_type('lbfgs_armijo_nonmonotone')
     
     # Repeating the whole protocol for n decoys and get the best decoy.
     for decoy in range(decoys):
@@ -923,14 +965,11 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
     produces a mutated pose that has the substitutions and is repacked and 
     minimized. Also outputs a dict with the energy change and RMSD of the 
     mutated pose
-
     substitutions should be list of 3-member tuples, each representing a point 
     substitution in the form output by the compare_sequences function: 
     (site, original_AA, substituted_AA)
-
     The ex12 option will perform extra sampling ar chi 1 and chi 2 when 
     repacking. This increased sampling substantially increases runtime.
-
     Modified by Zhuofan.
     """
     if len(substitutions) == 0: # No change.
@@ -1060,6 +1099,7 @@ def partition_list(in_list, partitions, member):
 
     return in_list[start_index:end_index]
 
+
 def get_id(fasta_name):
     """
     Added by Changpeng. Used for check_replicates function
@@ -1074,6 +1114,7 @@ def get_id(fasta_name):
         n += 1
     fp.close()
     return labels
+
 
 def check_replicates(list_fasta_names):
     """
@@ -1114,6 +1155,7 @@ def check_replicates(list_fasta_names):
         replicates = None
     return replicates
 
+
 def seq_length_by_chain(wild_pose):
     """
     Added by Changpeng.
@@ -1135,6 +1177,7 @@ def seq_length_by_chain(wild_pose):
             wild_seqs[chain_name].append(former_len + 1)
         former_len += len(chain_seq)
     return wild_seqs
+
 
 def cut_by_chain(wild_pose, cut, list_fasta_names):
     """
@@ -1171,6 +1214,7 @@ def cut_by_chain(wild_pose, cut, list_fasta_names):
         wild_seqs[get_chain_from_chain_id(1,wild_pose)] = [wild_pose.chain_sequence(1),1]
     return wild_seqs
 
+
 def replicate_seqs(replicates, analyze_lists):
     """
     Find the replicate sequences' indices in the fasta files. The output format is shown below:
@@ -1187,13 +1231,15 @@ def replicate_seqs(replicates, analyze_lists):
         inds = None
     return inds
 
-def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq, fa_ind, pdb_name, 
-    make_model=True, main_chain=1, oligo_chains=None, substrate_chains=None, 
-    cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, cut_order=None, 
-    rep_fa_ind=None, replicate_id1=None, rep_searched=None,
-    protocol='repack+min', decoys=1, rounds=1, repulsive_weights=None,
-    ex12=True, repacking_range=False, backbone=True, only_protein=False, 
-    debugging_mode=False, unconstrain_final_score=True, duplicated_chains=None):
+
+def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq, 
+    fa_ind, pdb_name, make_model=True, main_chain=1, oligo_chains=None, 
+    substrate_chains=None, cat_res=None, ind_type='pdb', 
+    pdb_index_match_mutant=False, cut_order=None, rep_fa_ind=None, 
+    replicate_id1=None, rep_searched=None, protocol='repack+min', decoys=1, 
+    rounds=1, ex12=True, repacking_range=False, backbone=True, 
+    only_protein=False, debugging_mode=False, unconstrain_final_score=True, 
+    duplicated_chains=None, coveloution_method='distance'):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1202,12 +1248,10 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     recently collected, what substitutions the sequence contains, whether 
     multiple substitutions are present, and whether substitutions are 
     conservative. 
-
     If reference pose and score function are provided, will report several 
     other checks. If make_model is true, a mutated model of the reference pose
     which includes the identified substitutions will be created, and all 
     evaluations will be performed on the mutated model.
-
     Other checks include:
     --If a mutated model is made, the energy change and RMSD compared to the 
         original model
@@ -1219,7 +1263,6 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
         substitutions interact energetically with catalytic residues
     --If ligands are specified as a list in substrate_chains, checks whether 
         substitutions interact energetically with ligands
-
     The ex12 indicates whether to perform extra sampling ar chi 1 and chi 2 when 
     repacking. This increased sampling substantially increases runtime. 
     """
@@ -1229,7 +1272,8 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     # Identify sequence differences from the original
     print("Chain is:{}".format(list(fa_ind.keys())[0]))
     print("This is the {}th FASTA file!".format(list(fa_ind.values())[0]))
-    substitutions, new_subs = compare_sequences(pdb_name, {list(fa_ind.keys())[0] : pdb_seq[list(fa_ind.keys())[0]]}, seqrecord.seq, 
+    substitutions, new_subs = compare_sequences(pdb_name, 
+        {list(fa_ind.keys())[0] : pdb_seq[list(fa_ind.keys())[0]]}, seqrecord.seq, 
         query[list(fa_ind.values())[0]], ind_type, pdb_index_match_mutant)
 
     # replicates processing
@@ -1242,7 +1286,8 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
             for ff, rest in enumerate(fastas):
                print("Chain is:{}".format(cut_order[fa_inds[ff]]))
                print("This is the {}th FASTA file!".format(fa_inds[ff]))
-               res_substitutions, res_new_subs = compare_sequences(pdb_name, {cut_order[fa_inds[ff]]: pdb_seq[cut_order[fa_inds[ff]]]}, \
+               res_substitutions, res_new_subs = compare_sequences(pdb_name, 
+                    {cut_order[fa_inds[ff]]: pdb_seq[cut_order[fa_inds[ff]]]}, 
                     rest.seq, query[fa_inds[ff]], ind_type,pdb_index_match_mutant)
                substitutions += res_substitutions
                new_subs += res_new_subs
@@ -1256,23 +1301,24 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     mut_tags['substitutions'] = ';'.join(sub_shorts)
 
     # Add whether mutation is in pose or not
-    mut_tags['is_in_PDB'] = ';'.join([str(pm[3]) for pm in substitutions])
+    mut_tags['is_in_PDB'] = ';'.join([str(pm[3]).upper() for pm in substitutions])
 
     # Add to output data whether there are multiple substitutions
     mut_tags['multiple'] = len(new_subs) > 1
 
     # Add whether substitution(s) are conservative to output data
     conservations = [is_conservative(pm) for pm in substitutions]
-    mut_tags['conservative'] = ';'.join([str(i) for i in conservations])
+    mut_tags['conservative'] = ';'.join([str(i).upper() for i in conservations])
 
     # If the mutant model is being made, the subsequent steps should use the 
     # Mutant model for increased accuracy, so that step is performed here
     if make_model:
         modified_ref_pose, mutated_pose, mut_pose_info = \
-            make_mutant_model(ref_pose, new_subs, score_functions, protocol=protocol, 
-                decoys=decoys, rounds=rounds, repulsive_weights=repulsive_weights, 
-                ex12=ex12, repacking_range=repacking_range, backbone=backbone, 
-                only_protein=only_protein, no_constraint_scoring=unconstrain_final_score, 
+            make_mutant_model(ref_pose, new_subs, score_functions, 
+                protocol=protocol, decoys=decoys, rounds=rounds, ex12=ex12, 
+                repacking_range=repacking_range, backbone=backbone, 
+                only_protein=only_protein, debugging_mode=debugging_mode,
+                no_constraint_scoring=unconstrain_final_score, 
                 duplicated_chains=duplicated_chains)
         
         # Switch back to a single score function
@@ -1295,10 +1341,16 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     # Add substitution layer to output data
     layers = [identify_res_layer(ref_pose_copy, pm[0], main_chain=list(fa_ind.values())[0]+1) 
         for pm in new_subs]
-    mut_tags['layer'] = ';'.join(layers)
+    mut_tags['layer'] = ';'.join([i.upper() for i in layers])
 
     # Add whether multiple substitutions are interacting to output data
-    mut_tags['coevolution'] = check_coevolution(ref_pose_copy, sf, new_subs)
+    sites = [s[0] for s in new_subs]
+    if coveloution_method == 'distance':
+        coevolution = check_coevolution(ref_pose_copy, sites)
+
+    if coveloution_method == 'energy':
+        coevolution = check_coevolution(ref_pose_copy, sites, score_function=sf)
+    mut_tags['coevolution'] = coevolution
 
     # Add whether substitutions are near multi-chain interface to output data
     if oligo_chains:
@@ -1323,10 +1375,16 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
 
     return modified_ref_pose, mut_df, mutated_pose, substitutions, new_subs, replicate_id1, rep_searched
 
-########## Main ###########################################################         
+########## Main ################################################################         
 
-def get_sf(rep_type, symmetry=False, membrane=False, constrain=True):
+def get_sf(rep_type, symmetry=False, membrane=False, constrain=True, cst_wt=1.0):
+    """
+    Determines the appropriate score function to use, based on a rep_type
+    that is either hard (ref2015) or soft (ref2015_soft), whether symmetry 
+    and/or membrane modeling are in use, and whether constraints are desired.
+    """
     assert rep_type in ['hard', 'soft']
+
     if symmetry: # Declare symmetric score functions
         score_function = SymmetricScoreFunction()
         if rep_type == 'hard':
@@ -1355,15 +1413,16 @@ def get_sf(rep_type, symmetry=False, membrane=False, constrain=True):
     # The score functions do not have constraint weights incorporated in 
     # themselves. If requisite, the constraint weights are added.
     if constrain:
-        score_function.set_weight(ScoreType.atom_pair_constraint, 1.0)
-        score_function.set_weight(ScoreType.coordinate_constraint, 1.0)
-        score_function.set_weight(ScoreType.angle_constraint, 1.0)
-        score_function.set_weight(ScoreType.dihedral_constraint, 1.0)
-        score_function.set_weight(ScoreType.metalbinding_constraint, 1.0)
-        score_function.set_weight(ScoreType.chainbreak, 1.0)
-        score_function.set_weight(ScoreType.res_type_constraint, 1.0)
+        score_function.set_weight(ScoreType.atom_pair_constraint, cst_wt)
+        score_function.set_weight(ScoreType.coordinate_constraint, cst_wt)
+        score_function.set_weight(ScoreType.angle_constraint, cst_wt)
+        score_function.set_weight(ScoreType.dihedral_constraint, cst_wt)
+        score_function.set_weight(ScoreType.metalbinding_constraint, cst_wt)
+        score_function.set_weight(ScoreType.chainbreak, cst_wt)
+        score_function.set_weight(ScoreType.res_type_constraint, cst_wt)
         
     return score_function
+
 
 def get_pose(pdb, symmetry=None, membrane=None, constrain=True):
     """
@@ -1393,7 +1452,72 @@ def get_pose(pdb, symmetry=None, membrane=None, constrain=True):
     
     return pose
 
-########## Executing ###########################################################         
+
+def print_pose_scores(pose):
+    """
+    Prints all energies in a pose that have a non-zero weight in REF2015
+    Note that scores are unweighted.
+    """
+    nonzeros = ['fa_atr', 'fa_rep', 'fa_sol', 'fa_intra_rep', 
+        'fa_intra_sol_xover4', 'lk_ball_wtd', 'fa_elec', 'pro_close', 
+        'hbond_sr_bb', 'hbond_lr_bb', 'hbond_bb_sc', 'hbond_sc', 'dslf_fa13', 
+        'atom_pair_constraint', 'coordinate_constraint', 'angle_constraint', 
+        'dihedral_constraint', 'metalbinding_constraint', 'omega', 'fa_dun', 
+        'p_aa_pp', 'yhh_planarity', 'ref', 'chainbreak', 'rama_prepro', 
+        'res_type_constraint', 'total_score']
+
+    pose_energies = pose.energies().total_energies()
+    listed_scores = pose_energies.show_nonzero().split()
+    listed_scores = [i.rstrip(':') for i in listed_scores]
+    for i in nonzeros:
+        if i in listed_scores:
+            print("{:<40}{}".format(i, listed_scores[listed_scores.index(i)+1]))
+        else:
+            print("{:<40}{}".format(i, 0))
+
+
+def calc_single_res_Es(pose, sf, single_chain=True):
+    """
+    For a given pose and score function, returns a list of single-residue
+    energies. If single_chain is true, only returns energies for the first 
+    chain in the pose.
+    """
+    prem = PerResidueEnergyMetric()
+    prem.set_scorefunction(sf)
+    
+    e_vals = prem.calculate(pose)
+
+    if single_chain:
+        return [e_vals[i] for i in range(1, pose.chain_end(1) + 1)]   
+    else:
+        return [e_vals[i] for i in range(1, pose.total_residue() + 1)]
+
+def plot_res_ddG(ref_pose, mut_pose, sf, name=None):
+    """
+    Generates two per-residue energy plots from a pair of poses. The first
+    is the total energies of each residue in both poses. The second is the 
+    difference in per-residue energies between the poses. Reference is in red
+    in the first plot, and the mut_pose is in blue.
+    """
+    ref_Es = calc_single_res_Es(ref_pose, sf)
+    mut_Es = calc_single_res_Es(mut_pose, sf)
+    dE = np.array(mut_Es) - np.array(ref_Es)
+
+    # Plot
+    fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True)
+    fig.set_size_inches(7.5, 5)
+    fig.set_dpi(300)
+    ax1.plot(ref_Es, linewidth=0.3, color='red')
+    ax1.plot(mut_Es, linewidth=0.3, color='blue')
+    ax2.plot(dE, linewidth=0.3, color='black')
+    fig.tight_layout()
+    if name:
+        plt.savefig(name)
+    else:
+        plt.show()
+    plt.close()
+
+########## Executing ###########################################################
 
 def main(args):
     # Load Rosetta
@@ -1415,11 +1539,13 @@ def main(args):
 
     score_functions = list()
     for rep_type in args.repulsive_type:
-        score_function = get_sf(rep_type, symmetry=args.symmetry, membrane=args.membrane, constrain=args.constrain)
+        score_function = get_sf(rep_type, symmetry=args.symmetry, 
+            membrane=args.membrane, constrain=args.constrain)
         score_functions.append(score_function)
 
     # Load protein model
-    wild_pose = get_pose(args.template_pdb, symmetry=args.symmetry, membrane=args.span_file, constrain=args.constrain)
+    wild_pose = get_pose(args.template_pdb, symmetry=args.symmetry, 
+        membrane=args.span_file, constrain=args.constrain)
 
     # Read fasta sequences
     # edited by Changpeng
@@ -1438,15 +1564,11 @@ def main(args):
         fasta_list = parse_fastafile(i)
         analyze_lists.append(fasta_list[1:])
         wts.append(fasta_list[0])
+
     # get the replicate inds in FASTA files
     replicate_inds = replicate_seqs(replicates,analyze_lists)
     print(replicate_inds)
- 
-    # Take subset of fasta list if parallelizing
-    #analyze_list = partition_list(fasta_list[1:], *args.parallel_partition)
-    #print(analyze_list[0])
         
-    #wt = fasta_list[0]
     # split wild_pose into different parts that are corresponding to cut_regions
     pdb_seqs = cut_by_chain(wild_pose, args.cut_region_by_chains, args.mutants_list)
     print("Cut regions of the pdb and their start index in the pdb are:")
@@ -1463,21 +1585,34 @@ def main(args):
         for n, mutant in enumerate(analyze_lists[c]):
             if read_name_tag(mutant.id)['id_1'] not in replicates_searched: 
                 ref_pose = pr.Pose(wild_pose)
-                modified_ref_pose, single_mutant_info, mutated_pose, substitutions, new_subs, \
-                    replicate_inds, replicates_searched = \
-                    analyze_mutant_protein(mutant, ref_pose, score_functions, wts, pdb_seqs, 
-                    {args.cut_region_by_chains[c]: c}, pdb_name=args.template_pdb, 
-                    make_model=args.make_models, main_chain=args.main_chain, 
-                    oligo_chains=args.interface_chain, substrate_chains=args.ligand_chain, 
-                    cat_res=args.catalytic_residues, ind_type=args.ind_type, 
-                    pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
-                    cut_order=args.cut_region_by_chains, rep_fa_ind=replicates, 
-                    replicate_id1=replicate_inds, rep_searched=replicates_searched, \
-                    protocol=args.protocol, decoys=args.iterations, rounds=args.rounds, \
-                    repulsive_weights=args.repulsive_weights, ex12=args.extra_rotamers, \
-                    repacking_range=args.neighborhood_residue, backbone=args.backbone, \
-                    only_protein=args.only_protein, debugging_mode=args.debugging_mode, \
-                    unconstrain_final_score=args.unconstrain_ddg, duplicated_chains=args.duplicated_chains)
+                modified_ref_pose, single_mutant_info, mutated_pose, \
+                    substitutions, new_subs, replicate_inds, \
+                    replicates_searched = analyze_mutant_protein(
+                        mutant, ref_pose, score_functions, 
+                        wts, pdb_seqs, {args.cut_region_by_chains[c]: c}, 
+                        pdb_name=args.template_pdb, 
+                        make_model=args.make_models, 
+                        main_chain=args.main_chain, 
+                        oligo_chains=args.interface_chain, 
+                        substrate_chains=args.ligand_chain, 
+                        cat_res=args.catalytic_residues, 
+                        ind_type=args.ind_type, 
+                        pdb_index_match_mutant=args.is_pdb_index_match_mutant, 
+                        cut_order=args.cut_region_by_chains, 
+                        rep_fa_ind=replicates, 
+                        replicate_id1=replicate_inds, 
+                        rep_searched=replicates_searched, 
+                        protocol=args.protocol, 
+                        decoys=args.iterations, 
+                        rounds=args.rounds, 
+                        ex12=args.extra_rotamers, 
+                        repacking_range=args.neighborhood_residue, 
+                        backbone=args.backbone, 
+                        only_protein=args.only_protein, 
+                        debugging_mode=args.debugging_mode, 
+                        unconstrain_final_score=args.unconstrain_ddg, 
+                        duplicated_chains=args.duplicated_chains, 
+                        coveloution_method=args.coveloution_method)
             else:
                 print("Replicate that is already detected!. Skip this round of mutation.")
             # Display results for this mutant
@@ -1502,20 +1637,26 @@ def main(args):
                 modified_ref_pose.dump_pdb(outname[:-4] + '_ref.pdb')
                 mutated_pose.dump_pdb(outname)
 
+                # Generate a per-residue energy comparison plot if debugging
+                if args.debugging_mode:
+                    plot_res_ddG(modified_ref_pose, mutated_pose,  
+                        score_functions[1], outname[:-4] + \
+                        '_res_score_changes.png')
+
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
             for s in subs_clean:
     #            if s not in all_substitutions:
                     all_substitutions.append(s)
+
     # Make report names
     if args.report_name:
         main_report_name = join(outdir, args.report_name + '_mutants')
         subs_report_name = join(outdir, args.report_name + '_substitutions')
-        #pivot_report_name = join(outidr, args.report_name + '_substitutions_pivot')
+
     else:
         main_report_name = join(outdir, 'mutants_summary')
         subs_report_name = join(outdir, 'substitutions_summary')
-        #pivot_report_name = join(outdir, 'pivot_summary')
 
     if args.parallel_partition != [1, 1]:
         main_report_name += '_{1}_of_{0}.csv'.format(*(args.parallel_partition))
@@ -1523,7 +1664,7 @@ def main(args):
     else:
         main_report_name += '.csv'
         subs_report_name += '.csv'
-        #pivot_report_name += '.csv'
+
     # Make mutants summary csv
     all_mutants_info.to_csv(main_report_name, index=False)
 
@@ -1535,15 +1676,8 @@ def main(args):
     all_subs_info = pd.DataFrame(all_subs_clean)
     all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
     all_subs_info['count'] = counts
-    #chains = set(all_subs_info['chain'].values.tolist())
-    #for c in chains:
-        #pivot = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
-        #subs_pivot = pd.pivot_table(pivot, values='count', index=['native','mutant'], columns=['site'])
-        #chain_subs_info = all_subs_info[all_subs_info['chain'] == c].loc[:,['site','native','mutant','count']]
-        #chain_subs_info.to_csv(subs_report_name + c)
     all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
     all_subs_info.to_csv(subs_report_name, index=False)
-    #subs_pivot.to_csv(pivot_report_name)
 
 
 if __name__ == '__main__':
