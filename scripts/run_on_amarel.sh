@@ -108,7 +108,7 @@ then
   memory="--mem "${memory}
 fi
 
-protein=${template_pdb%%"_"*}
+protein=$(basename ${template_pdb%%"_"*})
 
 if [ ${#mutant_list[@]} -gt 1 ]
 then
