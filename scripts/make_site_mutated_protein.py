@@ -1399,7 +1399,9 @@ def get_sf(rep_type, symmetry=False, membrane=False, constrain=True, cst_wt=1.0)
         score_function.set_weight(ScoreType.metalbinding_constraint, cst_wt)
         score_function.set_weight(ScoreType.chainbreak, cst_wt)
         score_function.set_weight(ScoreType.res_type_constraint, cst_wt)
-        
+    # Increase the intramolecular repulsive weight of the ligands to 0.55.
+    score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.545)
+    
     return score_function
 
 
