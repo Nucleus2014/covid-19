@@ -154,6 +154,9 @@ def parse_args():
     parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, choices=['soft', 'hard'], 
         default=['hard', 'hard'], help='Using the normal hard-rep or the \
         soft-rep score function for repacking and minimization, respectively.')
+    parser.add_argument('-dis', '--fa_max_dis', type=float, default=9.0, 
+        help='The max distance between two atoms that will be considered in \
+        Lennard-Jones potential calculation.')
     parser.add_argument('-rnd', '--rounds', type=int, default=1, 
         help='The rounds of repacking and minimization calculations being repeated \
         in one trajectory.')
@@ -1501,19 +1504,19 @@ def plot_res_ddG(ref_pose, mut_pose, sf, name=None):
 ########## Executing ###########################################################
 
 def main(args):
-    # Load Rosetta
+    # Initialize PyRosetta
     opts = '-mute all -run:preserve_header'
+    opts += ' -fa_max_dis ' + str(args.fa_max_dis)
     if args.params:
         opts += ' -extra_res_fa ' + ' '.join(args.params)
-    # So far we don't allow switching the score function in fast relax
+    pr.init(opts)
+
+    # So far we don't allow the score function in FastRelax to change.
     if args.protocol == 'fastrelax':
         if args.repulsive_type:
             args.repulsive_type = None
         if args.repulsive_weights:
             args.repulsive_weights = None
-    if args.protocol == 'repack+min':
-        opts += ' -fa_max_dis 9.0'
-    pr.init(opts)
 
     # Set up output directory if generating PDB models
     outdir = out_directory(args.out_dir)
