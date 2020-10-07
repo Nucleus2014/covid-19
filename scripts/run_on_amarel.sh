@@ -8,17 +8,19 @@ do
     -dup) duplicated_chains="$2";;
     -ind) ind_type="$2";;
     -sym) symmertry="$2";;
-    -mem) membrane="$2";;
+    -memb) membrane="$2";;
     -proto) protocol="$2";;
     -ite) iterations="$2";;
     -rep) repulsive_type="$2";;
     -rnd) rounds="$2";;
+    -rep_wts) repulsive_weights="$2";;
     -op) only_protein="$2";;
     -nbh) neighborhood_residue="$2";;
     -fix_bb) fix_backbone="$2";;
     -debug) debugging_mode="$2";;
     -wl) workload="$2";;
     -part) partition="$2";;
+    -mem) memory="$2";;
     *) break;
   esac; shift 2
 done
@@ -26,7 +28,14 @@ done
 IFS=','
 mutant_list=(${mutant_list[@]}) # convert mutant_list to array
 cut_region_by_chains=(${cut_region_by_chains[@]})  # convert cut_region_by_chains to array
-repulsive_type=(${repulsive_type[@]}) # convert repulsive_type to array
+if ! [ -z "${repulsive_type}" ]
+then
+  repulsive_type="-rep "${repulsive_type[@]} # convert repulsive_type to string
+fi
+if ! [ -z "${repulsive_weights}" ]
+then
+  repulsive_weights="-rep_wts "${repulsive_weights[@]} # convert repulsive_weights to string
+fi
 if ! [ -z "${duplicated_chains}" ]
 then
   duplicated_chains="-dup "${duplicated_chains[@]} # convert duplicated_chains to string
@@ -56,11 +65,6 @@ fi
 if ! [ -z "${iterations}" ]
 then
   iterations="-ite ${iterations}"
-fi
-
-if ! [ -z "${repulsive_type}" ]
-then
-  repulsive_type="-rep ${repulsive_type[@]}"
 fi
 
 if ! [ -z "${rounds}" ]
@@ -99,6 +103,11 @@ then
   workload=15
 fi
 
+if ! [ -z "${memory}" ]
+then
+  memory="--mem "${memory}
+fi
+
 protein=${template_pdb%%"_"*}
 
 if [ ${#mutant_list[@]} -gt 1 ]
@@ -113,13 +122,13 @@ then
 
   fastas=$( echo ${mutant_list[*]} )
   chains=$( echo ${cut_region_by_chains[*]} )
-  slurmit.py --job ${protein}_0 --partition ${partition} --begin now \
+  slurmit.py --job ${protein}_0 --partition ${partition} --begin now ${memory} \
     --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
     -m ${fastas} -cut ${chains} ${duplicated_chains} -rn ${protein}_0 ${ind_type} \
-    ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
-    ${rounds} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
+    ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} ${rounds} \
+    ${repulsive_weights} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
     ${debugging_mode} -no_cst_score"
-  sleep 0.1
+  sleep 0.05
 
   for motif_idx in ${!mutant_list[@]}
   do
@@ -157,14 +166,14 @@ do
 
   for ((job_idx=1;job_idx<=total_jobs;job_idx++))
   do
-    slurmit.py --job ${protein}_${job_idx} --partition ${partition} --begin now \
+    slurmit.py --job ${protein}_${job_idx} --partition ${partition} --begin now ${memory} \
       --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
       -m ${mutant_list[$motif_idx]}_${job_idx}.fasta.txt ${cut_region_by_chains[$motif_idx]} \
-      ${duplicated_chains} -rn ${report_name_prefix}_${job_idx} \
-      ${ind_type} ${symmertry} ${membrane} ${protocol} ${iterations} \
-      ${repulsive_type} ${rounds} ${only_protein} ${neighborhood_residue} \
+      ${duplicated_chains} -rn ${report_name_prefix}_${job_idx} ${ind_type} \
+      ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
+      ${rounds} ${repulsive_weights} ${only_protein} ${neighborhood_residue} \
       ${fix_backbone} ${debugging_mode} -no_cst_score"
-    sleep 0.1
+    sleep 0.05
   done
 done
 
