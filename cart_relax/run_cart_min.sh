@@ -19,7 +19,8 @@ srun $ROSETTA3/bin/relax.linuxgccrelease \
   -use_input_sc \
   -constrain_relax_to_start_coords \
   -ignore_unrecognized_res \
-  -nstruct 20 \
+  -fa_max_dis 9.0 \
+  -nstruct 100 \
   -relax:coord_constrain_sidechains  \
   -score:weights ref2015_cart \
   -relax:min_type lbfgs_armijo_nonmonotone \
