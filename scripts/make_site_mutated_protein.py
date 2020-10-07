@@ -170,6 +170,9 @@ def parse_args():
         such as ligands and RNA.')
     parser.add_argument('-fix_bb', '--backbone', action='store_false', 
         help='Giving a flag of -fix_bb will hold the backbone fixed in minimization.')
+    parser.add_argument('-cartddg', '--cartesian_ddg', action='store_true', default=False, 
+        help='Turning on the -cartddg should only be done for cartesian ddg for membrane \
+        proteins. Will not function if fast relax is not turned on.')
     parser.add_argument('-no_cst', '--constrain', action='store_false', 
         help='Giving a flag of -no_cst will prevent coordinate constraints \
         from being applied to the pose during repacking and minimization.')
@@ -915,7 +918,7 @@ def fast_relax_with_muts(pose, score_function, decoys, fastrelax_mover):
 def make_mutant_model(ref_pose, substitutions, score_functions, 
     protocol='repack+min', decoys=1, rounds=1, repulsive_weights=None, 
     ex12=True, repacking_range=False, backbone=True, only_protein=False, 
-    no_constraint_scoring=True, duplicated_chains=None):
+    no_constraint_scoring=True, duplicated_chains=None, cartesian_ddg=False):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -975,9 +978,29 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
         elif protocol == 'fastrelax':
             # Set up a FastRelax mover. Set repeating trajectories to 1.
             fast_relax = FastRelax(1)
-            fast_relax.set_scorefxn(score_functions[1])
+            #fast_relax.set_scorefxn(score_functions[1])
             fast_relax.set_task_factory(task_factory)
             fast_relax.set_movemap(move_map)
+            
+            #Checking if Cartesian DDG run - PRIMARILY FOR MEMBRANE PROTEINS
+            if cartesian_ddg:
+                fast_relax.cartesian(True)
+                score_functions[1].set_weight(ScoreType.cart_bonded, 0.5)
+                score_functions[1].set_weight(ScoreType.pro_close, 0.0)
+                script=pr.rosetta.std.vector_std_string()
+                script.append("switch:cartesian")
+                script.append("repeat 2")
+                script.append("ramp_repack_min 0.02  0.01     1.0  50")
+                script.append("ramp_repack_min 0.25  0.01     0.5  50")
+                script.append("ramp_repack_min 0.55  0.01     0.0 100")
+                script.append("ramp_repack_min 1.00  0.00001  0.0 200")
+                script.append("accept_to_best")
+                script.append("endrepeat")
+                print(script)
+                fast_relax.set_script_from_lines(script)
+
+            #Applying score function after cartesian check.
+            fast_relax.set_scorefxn(score_functions[1])
 
             # Make the mutated pose.
             mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
@@ -1218,7 +1241,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     replicate_id1=None, rep_searched=None, protocol='repack+min', decoys=1, 
     rounds=1, ex12=True, repacking_range=False, backbone=True, 
     only_protein=False, unconstrain_final_score=True, 
-    duplicated_chains=None, coveloution_method='distance'):
+    duplicated_chains=None, coveloution_method='distance', cartesian_ddg=False):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1296,9 +1319,10 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
             make_mutant_model(ref_pose, new_subs, score_functions, 
                 protocol=protocol, decoys=decoys, rounds=rounds, ex12=ex12, 
                 repacking_range=repacking_range, backbone=backbone, 
-                only_protein=only_protein, 
+                only_protein=only_protein,
                 no_constraint_scoring=unconstrain_final_score, 
-                duplicated_chains=duplicated_chains)
+                duplicated_chains=duplicated_chains \
+                cartesian_ddg=cartesian_ddg) 
         
         # Switch back to a single score function
         sf = score_functions[1]
@@ -1592,7 +1616,8 @@ def main(args):
                         only_protein=args.only_protein, 
                         unconstrain_final_score=args.unconstrain_ddg, 
                         duplicated_chains=args.duplicated_chains, 
-                        coveloution_method=args.coveloution_method)
+                        coveloution_method=args.coveloution_method,
+                        cartesian_ddg=args.cartesian_ddg)
             else:
                 print("Replicate that is already detected!. Skip this round of mutation.")
             # Display results for this mutant
