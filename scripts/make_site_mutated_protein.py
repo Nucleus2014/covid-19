@@ -194,8 +194,8 @@ def parse_args():
         member to run on this processor, from 1 to the number of partitions. \
         not working for now.')
     parser.add_argument('-debug', '--debugging_mode', action='store_true', 
-        help='Giving a flag of -debug, it will print out the task operations on \
-        all residues, namely point mutations, repacking or keeping static.')
+        help='Giving a flag of -debug will plot the per-residue scores of the \
+        mutated pose and the reference pose.')
     return parser.parse_args()
 
 ########## Text-based data collection ##########################################
@@ -1311,7 +1311,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
 
         # Check if is_in_pdb, replace NA with energy terms
         tmp = mut_tags['is_in_PDB'].split(";")
-        if 'True' not in tmp:
+        if 'TRUE' not in tmp:
             mut_tags['energy_change'] = 'NA'
             mut_tags['rmsd'] = 'NA'
 
@@ -1476,25 +1476,46 @@ def calc_single_res_Es(pose, sf, single_chain=True):
     else:
         return [e_vals[i] for i in range(1, pose.total_residue() + 1)]
 
-def plot_res_ddG(ref_pose, mut_pose, sf, name=None):
+def plot_res_ddG(ref_pose, com_pose, mut_pose, sf, name=None):
     """
     Generates two per-residue energy plots from a pair of poses. The first
     is the total energies of each residue in both poses. The second is the 
     difference in per-residue energies between the poses. Reference is in red
     in the first plot, and the mut_pose is in blue.
     """
-    ref_Es = calc_single_res_Es(ref_pose, sf)
-    mut_Es = calc_single_res_Es(mut_pose, sf)
-    dE = np.array(mut_Es) - np.array(ref_Es)
+    ref_Es = np.array(calc_single_res_Es(ref_pose, sf))
+    com_Es = np.array(calc_single_res_Es(com_pose, sf))
+    mut_Es = np.array(calc_single_res_Es(mut_pose, sf))
 
     # Plot
-    fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True)
-    fig.set_size_inches(7.5, 5)
+    fig, axes = plt.subplots(4, 1, sharex=True)
+    axes[0].plot(ref_Es, linewidth=0.3, color='red')
+    axes[0].plot(com_Es, linewidth=0.3, color='blue')
+    axes[0].plot(mut_Es, linewidth=0.3, color='black')
+    axes[0].set_ylabel('Residue Energy', fontsize=9)
+    axes[1].plot(com_Es - ref_Es, linewidth=0.3, color='black')
+    axes[1].set_ylabel('Reference-Start', fontsize=9)
+    axes[2].plot(mut_Es - ref_Es, linewidth=0.3, color='black')
+    axes[2].set_ylabel('Mutant-Start', fontsize=9)
+    axes[3].plot(mut_Es - com_Es, linewidth=0.3, color='black')
+    axes[3].set_ylabel('Per-Residue Energies', fontsize=9)
+    
+    # Format figure
+    fig.set_size_inches(7.5, 10)
     fig.set_dpi(300)
-    ax1.plot(ref_Es, linewidth=0.3, color='red')
-    ax1.plot(mut_Es, linewidth=0.3, color='blue')
-    ax2.plot(dE, linewidth=0.3, color='black')
+    bottom, top, left, right = [0.05, 0.95, 0.1, 1]
+    vcenter = bottom + (top - bottom)/2
+    vlower = bottom + (vcenter - bottom)/3
+    vupper = vcenter + 2*(top - vcenter)/3
+    hcenter = left + (right - left)/2
     fig.tight_layout()
+    fig.subplots_adjust(top=top, bottom=bottom, left=left, right=right)
+     
+    # Label axes
+    fig.text(0.001, vcenter, 'Residue energy', fontsize=10, rotation='vertical', ha='left', va='center')
+    fig.text(hcenter, 0.001, 'Residue Number', fontsize=10, ha='center', va='bottom')
+    fig.text(hcenter, 0.99, 'Per-Residue Energies', fontsize=11, ha='center', va='top')
+
     if name:
         plt.savefig(name)
     else:
@@ -1504,7 +1525,7 @@ def plot_res_ddG(ref_pose, mut_pose, sf, name=None):
 ########## Executing ###########################################################
 
 def main(args):
-    # Initialize PyRosetta
+    # Initialize PyRosetta module
     opts = '-mute all -run:preserve_header'
     opts += ' -fa_max_dis ' + str(args.fa_max_dis)
     if args.params:
@@ -1622,9 +1643,8 @@ def main(args):
 
                 # Generate a per-residue energy comparison plot if debugging
                 if args.debugging_mode:
-                    plot_res_ddG(modified_ref_pose, mutated_pose,  
-                        score_functions[1], outname[:-4] + \
-                        '_res_score_changes.png')
+                    plot_res_ddG(ref_pose.clone(), modified_ref_pose, mutated_pose,  
+                    score_functions[1], outname[:-4] + '_res_score_changes.png')
 
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
