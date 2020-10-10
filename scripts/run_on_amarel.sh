@@ -10,13 +10,15 @@ do
     -sym) symmertry="$2";;
     -memb) membrane="$2";;
     -proto) protocol="$2";;
-    -ite) iterations="$2";;
+    -cart) cartesian="$2";;
     -rep) repulsive_type="$2";;
-    -rnd) rounds="$2";;
+    -dis) fa_max_dis="$2";;
     -rep_wts) repulsive_weights="$2";;
-    -op) only_protein="$2";;
     -nbh) neighborhood_residue="$2";;
     -fix_bb) fix_backbone="$2";;
+    -op) only_protein="$2";;
+    -rnd) rounds="$2";;
+    -ite) iterations="$2";;
     -debug) debugging_mode="$2";;
     -wl) workload="$2";;
     -part) partition="$2";;
@@ -60,6 +62,18 @@ fi
 if ! [ -z "${protocol}" ]
 then
   protocol="-proto ${protocol}"
+fi
+
+if [ "${cartesian}" == "true" ]
+then
+  cartesian="-cart"
+else
+  cartesian=""
+fi
+
+if ! [ -z "${fa_max_dis}" ]
+then
+  fa_max_dis="-dis "${fa_max_dis}
 fi
 
 if ! [ -z "${iterations}" ]
@@ -125,9 +139,9 @@ then
   slurmit.py --job ${protein}_0 --partition ${partition} --begin now ${memory} \
     --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
     -m ${fastas} -cut ${chains} ${duplicated_chains} -rn ${protein}_0 ${ind_type} \
-    ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} ${rounds} \
-    ${repulsive_weights} ${only_protein} ${neighborhood_residue} ${fix_backbone} \
-    ${debugging_mode} -no_cst_score"
+    ${symmertry} ${membrane} ${protocol} ${cartesian} ${fa_max_dis} ${repulsive_type} \
+    ${repulsive_weights} ${neighborhood_residue} ${fix_backbone} ${only_protein} \
+    ${rounds} ${iterations} ${debugging_mode} -no_cst_score"
   sleep 0.05
 
   for motif_idx in ${!mutant_list[@]}
@@ -166,13 +180,13 @@ do
 
   for ((job_idx=1;job_idx<=total_jobs;job_idx++))
   do
-    slurmit.py --job ${protein}_${job_idx} --partition ${partition} --begin now ${memory} \
+    slurmit.py --job ${report_name_prefix}_${job_idx} --partition ${partition} --begin now ${memory} \
       --command "python3 ../../scripts/make_site_mutated_protein.py -t ${template_pdb} \
       -m ${mutant_list[$motif_idx]}_${job_idx}.fasta.txt ${cut_region_by_chains[$motif_idx]} \
       ${duplicated_chains} -rn ${report_name_prefix}_${job_idx} ${ind_type} \
-      ${symmertry} ${membrane} ${protocol} ${iterations} ${repulsive_type} \
-      ${rounds} ${repulsive_weights} ${only_protein} ${neighborhood_residue} \
-      ${fix_backbone} ${debugging_mode} -no_cst_score"
+      ${symmertry} ${membrane} ${protocol} ${cartesian} ${fa_max_dis} ${repulsive_type} \
+      ${repulsive_weights} ${neighborhood_residue} ${fix_backbone} ${only_protein} \
+      ${rounds} ${iterations} ${debugging_mode} -no_cst_score"
     sleep 0.05
   done
 done
