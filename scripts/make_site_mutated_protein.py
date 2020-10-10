@@ -985,17 +985,17 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
             # Set up a FastRelax mover. Set repeating rounds of repacking and minimization.
             fast_relax = FastRelax(rounds)
             fast_relax.set_scorefxn(score_functions[1])
-            fast_relax.set_task_factory(task_factory)
             fast_relax.set_movemap(move_map)
-            
             if cartesian:
                 fast_relax.cartesian(True)
 
             # Make the mutated pose.
+            fast_relax.set_task_factory(task_factory)
             mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
                 decoys, fast_relax)
             
             # Make the reference pose.
+            fast_relax.set_task_factory(ref_task_factory)
             modified_ref_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
                 1, fast_relax)
 
