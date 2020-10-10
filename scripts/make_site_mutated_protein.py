@@ -121,8 +121,8 @@ def parse_args():
         default=None, help='If a non-canonical residue/ligand is present, \
         provide a params file.')
     parser.add_argument('-mc', '--main_chain', type=int, default=1, 
-        help='The main chain being analyzed is 1 by default. Specify main \
-        chain if not 1.')
+        help='The main chain being analyzed is 1 by default. Specify main chain \
+        if not 1.')
     parser.add_argument('-ic', '--interface_chain', type=int, nargs='+', 
         default=None, help='If symmetry is used, specify the oligomeric chains.')
     parser.add_argument('-lig', '--ligand_chain', type=int, nargs='+', 
@@ -133,59 +133,60 @@ def parse_args():
         default=None, help='The catalytic residues of the enzyme. By default, \
         no residues are so designated. If residues are specified, report will \
         include whether substitutions interact with the catalytic residues.')
-    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', \
-        help = 'if pdb index matches mutant index, then set this flag to avoid pairwise \
-        alignment which costs much time and not so accurate')
+    parser.add_argument('-pmm', '--is_pdb_index_match_mutant', action='store_true', 
+        help = 'if pdb index matches mutant index, then set this flag to avoid \
+        pairwise alignment which costs much time and not so accurate')
     parser.add_argument('-ind', '--ind_type', choices = ['pose', 'pdb'], 
-        default = 'pdb', help='To show mutation residues indices in pdb or in pose order')
+        default = 'pdb', help='To show mutation residues indices in pdb or in \
+        pose order')
     parser.add_argument('-sym', '--symmetry', type=str,
         help='If the pose is symmetric, include a symdef file.')
-    parser.add_argument('-memb', '--membrane', required=False, action='store_true',
+    parser.add_argument('-memb', '--membrane', action='store_true',
         help='Declare if the protein is a membrane protein.')
     parser.add_argument('-mspan', '--span_file', 
         required=any(x in ['--membrane','-memb'] for x in sys.argv),
         help='If the pose is a membrane protein, include a spanfile.')
     parser.add_argument('-proto', '--protocol', choices=['fastrelax', 'repack+min'], 
-        default = 'repack+min', help='Employ either fast relax protocol or repacking \
-        and minimization on the pose.')
-    parser.add_argument('-ite', '--iterations', type=int, default=1, 
-        help='Giving a flag of -ite, [ite] trajectories will be run for each variant \
-        and output the decoy with the lowest score.')
-    parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, choices=['soft', 'hard'], 
-        default=['hard', 'hard'], help='Using the normal hard-rep or the \
-        soft-rep score function for repacking and minimization, respectively.')
+        default = 'repack+min', help='Apply either repacking and minimization\
+        or FastRelax to the pose.')
+    parser.add_argument('-cart', '--cartesian', action='store_true', 
+        help='Turning on the -cart would call either repacking+minimization or \
+        FastRelax in Cartesian coordinates.')
+    parser.add_argument('-rep', '--repulsive_type', type=str, nargs=2, 
+        choices=['soft', 'hard'], default=['hard', 'hard'], help='Using the default \
+        hard-rep or the soft-rep score function in repacking and minimization.')
     parser.add_argument('-dis', '--fa_max_dis', type=float, default=9.0, 
         help='The max distance between two atoms that will be considered in \
         Lennard-Jones potential calculation.')
-    parser.add_argument('-rnd', '--rounds', type=int, default=1, 
-        help='The rounds of repacking and minimization calculations being repeated \
-        in one trajectory.')
-    parser.add_argument('-rep_wts', '--repulsive_weights', type=float, nargs='*', \
+    parser.add_argument('-rep_wts', '--repulsive_weights', type=float, nargs='*', 
         default=None, help='Ramping Lennard-Jones repulsive weight in each rounds.')
+    parser.add_argument('-no_cst', '--constrain', action='store_false', 
+        help='Giving a flag of -no_cst will prevent coordinate constraints \
+        from being applied to the pose during repacking and minimization.')
     parser.add_argument('-no_ex', '--extra_rotamers', action='store_false', 
         help='Giving a flag of -no_ex will prevent using extra rotamer \
         sampling during repacking, saving a lot of time with reduced sampling.')
     parser.add_argument('-nbh', '--neighborhood_residue', type=float, 
         help='Giving a flag of -nbh will also allow surrounding residues \
             within [nbh] angstroms of the mutated residue to repack.')
+    parser.add_argument('-fix_bb', '--backbone', action='store_false', 
+        help='Giving a flag of -fix_bb will hold the backbone fixed in minimization.')
     parser.add_argument('-op', '--only_protein', action='store_true', 
         help='Giving a flag of -op will prevent non-protein motifs from repacking, \
         such as ligands and RNA.')
-    parser.add_argument('-fix_bb', '--backbone', action='store_false', 
-        help='Giving a flag of -fix_bb will hold the backbone fixed in minimization.')
-    parser.add_argument('-cartddg', '--cartesian_ddg', action='store_true', default=False, 
-        help='Turning on the -cartddg should only be done for cartesian ddg for membrane \
-        proteins. Will not function if fast relax is not turned on.')
-    parser.add_argument('-no_cst', '--constrain', action='store_false', 
-        help='Giving a flag of -no_cst will prevent coordinate constraints \
-        from being applied to the pose during repacking and minimization.')
+    parser.add_argument('-rnd', '--rounds', type=int, default=1, 
+        help='Repeating rounds of repacking and minimization calculations in one \
+        trajectory. Applicable for both repacking+minimization and FastRelax.')
+    parser.add_argument('-ite', '--iterations', type=int, default=1, 
+        help='Giving a flag of -ite, the protocol will run multiple trajectories \
+        and output the decoy with the lowest score.')
     parser.add_argument('-coev', '--coveloution_method', type=str, 
         choices=['energy', 'distance'], default='distance', 
         help='Whether mutations are a coevolution can be detected in one of two \
         ways: geometrically, based on the inter-residue distance and \
         orientation, or energetically, based on whether residues have nonzero \
         interface scores. Uses geometry by default.')
-    parser.add_argument('-no_cst_score', '--unconstrain_ddg', action='store_true', \
+    parser.add_argument('-no_cst_score', '--unconstrain_ddg', action='store_true', 
         default=False, help="Call this flag to return energies unconstrained")
     parser.add_argument('-no_models', '--make_models', action='store_false', 
         help='Giving a flag of -no_models will prevent PDB models from being \
@@ -919,9 +920,9 @@ def fast_relax_with_muts(pose, score_function, decoys, fastrelax_mover):
 
 
 def make_mutant_model(ref_pose, substitutions, score_functions, 
-    protocol='repack+min', decoys=1, rounds=1, repulsive_weights=None, 
+    protocol='repack+min', cartesian=False, repulsive_weights=None, 
     ex12=True, repacking_range=False, backbone=True, only_protein=False, 
-    no_constraint_scoring=True, duplicated_chains=None, cartesian_ddg=False):
+    rounds=1, decoys=1, no_constraint_scoring=True, duplicated_chains=None):
     """
     Given a reference pose and a list of substitutions, and a score function, 
     produces a mutated pose that has the substitutions and is repacked and 
@@ -967,6 +968,8 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
             minimizer = MinMover()
             minimizer.min_type('lbfgs_armijo_nonmonotone')
             minimizer.movemap(move_map)
+            if cartesian:
+                minimizer.cartesian(True)
             
             # Make the mutated pose.
             repacker.task_factory(task_factory)
@@ -979,31 +982,14 @@ def make_mutant_model(ref_pose, substitutions, score_functions,
                 score_functions, 1, rounds, repulsive_weights, repacker, minimizer)
         # FastRelax
         elif protocol == 'fastrelax':
-            # Set up a FastRelax mover. Set repeating trajectories to 1.
-            fast_relax = FastRelax(1)
-            #fast_relax.set_scorefxn(score_functions[1])
+            # Set up a FastRelax mover. Set repeating rounds of repacking and minimization.
+            fast_relax = FastRelax(rounds)
+            fast_relax.set_scorefxn(score_functions[1])
             fast_relax.set_task_factory(task_factory)
             fast_relax.set_movemap(move_map)
             
-            #Checking if Cartesian DDG run - PRIMARILY FOR MEMBRANE PROTEINS
-            if cartesian_ddg:
+            if cartesian:
                 fast_relax.cartesian(True)
-                score_functions[1].set_weight(ScoreType.cart_bonded, 0.5)
-                score_functions[1].set_weight(ScoreType.pro_close, 0.0)
-                script=pr.rosetta.std.vector_std_string()
-                script.append("switch:cartesian")
-                script.append("repeat 2")
-                script.append("ramp_repack_min 0.02  0.01     1.0  50")
-                script.append("ramp_repack_min 0.25  0.01     0.5  50")
-                script.append("ramp_repack_min 0.55  0.01     0.0 100")
-                script.append("ramp_repack_min 1.00  0.00001  0.0 200")
-                script.append("accept_to_best")
-                script.append("endrepeat")
-                print(script)
-                fast_relax.set_script_from_lines(script)
-
-            #Applying score function after cartesian check.
-            fast_relax.set_scorefxn(score_functions[1])
 
             # Make the mutated pose.
             mutated_pose = fast_relax_with_muts(ref_pose, score_functions[1], \
@@ -1239,12 +1225,11 @@ def replicate_seqs(replicates, analyze_lists):
 
 def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq, 
     fa_ind, pdb_name, make_model=True, main_chain=1, oligo_chains=None, 
-    substrate_chains=None, cat_res=None, ind_type='pdb', 
-    pdb_index_match_mutant=False, cut_order=None, rep_fa_ind=None, 
-    replicate_id1=None, rep_searched=None, protocol='repack+min', decoys=1, 
-    rounds=1, ex12=True, repacking_range=False, backbone=True, 
-    only_protein=False, unconstrain_final_score=True, 
-    duplicated_chains=None, coveloution_method='distance', cartesian_ddg=False):
+    substrate_chains=None, cat_res=None, ind_type='pdb', pdb_index_match_mutant=False, 
+    cut_order=None, rep_fa_ind=None, replicate_id1=None, rep_searched=None, 
+    protocol='repack+min', cartesian=False, repulsive_weights=None, ex12=True, 
+    repacking_range=False, backbone=True, only_protein=False, rounds=1, decoys=1, 
+    unconstrain_final_score=True, duplicated_chains=None, coveloution_method='distance'):
     """
     Given a biopython SeqRecord object with a fasta ID in the following form: 
     2020-03-28|2020-03-28|Count=1|hCoV-19/USA/WA-S424/2020|hCoV-19/USA/WA-S424/2020|NSP5
@@ -1320,12 +1305,11 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
     if make_model:
         modified_ref_pose, mutated_pose, mut_pose_info = \
             make_mutant_model(ref_pose, new_subs, score_functions, 
-                protocol=protocol, decoys=decoys, rounds=rounds, ex12=ex12, 
-                repacking_range=repacking_range, backbone=backbone, 
-                only_protein=only_protein,
+                protocol=protocol, cartesian=cartesian, repulsive_weights=repulsive_weights, 
+                ex12=ex12, repacking_range=repacking_range, backbone=backbone, 
+                only_protein=only_protein, rounds=rounds, decoys=decoys, 
                 no_constraint_scoring=unconstrain_final_score, 
-                duplicated_chains=duplicated_chains \
-                cartesian_ddg=cartesian_ddg) 
+                duplicated_chains=duplicated_chains) 
         
         # Switch back to a single score function
         sf = score_functions[1]
@@ -1383,7 +1367,7 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
 
 ########## Main ################################################################         
 
-def get_sf(rep_type, symmetry=False, membrane=False, constrain=True, cst_wt=1.0):
+def get_sf(rep_type, cartesian=False, symmetry=False, membrane=False, constrain=True, cst_wt=1.0):
     """
     Determines the appropriate score function to use, based on a rep_type
     that is either hard (ref2015) or soft (ref2015_soft), whether symmetry 
@@ -1426,6 +1410,12 @@ def get_sf(rep_type, symmetry=False, membrane=False, constrain=True, cst_wt=1.0)
         score_function.set_weight(ScoreType.metalbinding_constraint, cst_wt)
         score_function.set_weight(ScoreType.chainbreak, cst_wt)
         score_function.set_weight(ScoreType.res_type_constraint, cst_wt)
+    # Set the Cartesian score term.
+    if cartesian:
+        score_function.set_weight(ScoreType.cart_bonded, 0.5)
+        score_function.set_weight(ScoreType.pro_close, 0.0)
+        score_function.set_weight(ScoreType.metalbinding_constraint, 0)
+        score_function.set_weight(ScoreType.chainbreak, 0)
     # Increase the intramolecular repulsive weight of the ligands to 0.55.
     score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.545)
     
@@ -1467,7 +1457,7 @@ def print_pose_scores(pose):
     Note that scores are unweighted.
     """
     nonzeros = ['fa_atr', 'fa_rep', 'fa_sol', 'fa_intra_rep', 
-        'fa_intra_sol_xover4', 'lk_ball_wtd', 'fa_elec', 'pro_close', 
+        'fa_intra_sol_xover4', 'lk_ball_wtd', 'fa_elec', 
         'hbond_sr_bb', 'hbond_lr_bb', 'hbond_bb_sc', 'hbond_sc', 'dslf_fa13', 
         'atom_pair_constraint', 'coordinate_constraint', 'angle_constraint', 
         'dihedral_constraint', 'metalbinding_constraint', 'omega', 'fa_dun', 
@@ -1559,7 +1549,7 @@ def main(args):
     # So far we don't allow the score function in FastRelax to change.
     if args.protocol == 'fastrelax':
         if args.repulsive_type:
-            args.repulsive_type = None
+            args.repulsive_type = ['hard', 'hard']
         if args.repulsive_weights:
             args.repulsive_weights = None
 
@@ -1568,8 +1558,8 @@ def main(args):
 
     score_functions = list()
     for rep_type in args.repulsive_type:
-        score_function = get_sf(rep_type, symmetry=args.symmetry, 
-            membrane=args.membrane, constrain=args.constrain)
+        score_function = get_sf(rep_type, cartesian=args.cartesian, 
+            symmetry=args.symmetry, membrane=args.membrane, constrain=args.constrain)
         score_functions.append(score_function)
 
     # Load protein model
@@ -1632,16 +1622,17 @@ def main(args):
                         replicate_id1=replicate_inds, 
                         rep_searched=replicates_searched, 
                         protocol=args.protocol, 
-                        decoys=args.iterations, 
-                        rounds=args.rounds, 
+                        cartesian=args.cartesian, 
+                        repulsive_weights=args.repulsive_weights, 
                         ex12=args.extra_rotamers, 
                         repacking_range=args.neighborhood_residue, 
                         backbone=args.backbone, 
                         only_protein=args.only_protein, 
+                        rounds=args.rounds, 
+                        decoys=args.iterations, 
                         unconstrain_final_score=args.unconstrain_ddg, 
                         duplicated_chains=args.duplicated_chains, 
-                        coveloution_method=args.coveloution_method,
-                        cartesian_ddg=args.cartesian_ddg)
+                        coveloution_method=args.coveloution_method)
             else:
                 print("Replicate that is already detected!. Skip this round of mutation.")
             # Display results for this mutant
