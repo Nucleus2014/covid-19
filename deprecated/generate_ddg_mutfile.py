@@ -1,7 +1,7 @@
 import argparse
 from Bio import SeqIO
 import datetime
-from os import mkdir, makedirs, remove, rename
+from os import makedirs, remove
 from os.path import isdir, isfile, join
 import pandas as pd
 from pyrosetta import *
@@ -435,19 +435,19 @@ if __name__ == '__main__':
                     # iterate over point mutations
                     for pm in new_subs:
                         native_res = wild_pose.residue(pm[0]).name1()
-                        if native_res == pm[1]:
-                            fingerprint += pm[1] + str(pm[0]) + pm[2] + ';'
-                            mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
-                        else:
+                        if native_res != pm[1]:
                             print('The native residue type at pose position ' + \
                                 str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
                             native_res_2 = wild_pose.residue(pm[0] + 1).name1()
                             if native_res_2 == pm[1]:
-                                fingerprint += pm[1] + str(pm[0] + 1) + pm[2] + ';'
+                                fingerprint += pm[1] + ' ' + str(pm[0] + 1) + ' ' + pm[2] + ','
                                 mut_list.append(pm[1] + ' ' + str(pm[0] + 1) + ' ' + pm[2])
                             else:
                                 raise Exception('The native residue type at pose position ' + \
                                     str(pm[0]) + ' is ' + native_res + ' instead of ' + pm[1])
+                        else:
+                            fingerprint += pm[1] + ' ' + str(pm[0]) + ' ' + pm[2] + ','
+                            mut_list.append(pm[1] + ' ' + str(pm[0]) + ' ' + pm[2])
                         total_mutations += 1
                         # duplicate point mutations if has duplicated chains
                         if args.duplicated_chains:
@@ -458,7 +458,7 @@ if __name__ == '__main__':
                                 for duplicated_chain in args.duplicated_chains[1:]:
                                     duplicated_point_mutation_pose_index = wild_pose.pdb_info().\
                                         pdb2pose(duplicated_chain, int(res_pdb_info[0]))
-                                    fingerprint += pm[1] + str(duplicated_point_mutation_pose_index) + pm[2] + ';'
+                                    fingerprint += pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2] + ','
                                     mut_list.append(pm[1] + ' ' + str(duplicated_point_mutation_pose_index) + ' ' + pm[2])
                                     total_mutations += 1
                     # end of for loop for point mutations
@@ -470,35 +470,32 @@ if __name__ == '__main__':
                 print("Replicate that is already detected!. Skip this round of mutation.")
         # end of for loop for sequences in current fasta file
         # Single .fasta.txt file or multiple XXX_matched_0.fasta.txt files
-        if len(args.mutants_list) > 1:
+        if args.mutants_list[c].split('_')[-2] != 'matched' or len(args.mutants_list) > 1:
             last_idx = args.mutants_list[c].rfind('_')
             prefix = protein_name + '_' + args.mutants_list[c][last_idx + 1:-10]
         else: # Single XXX_matched_n.fasta.txt file, n > 0
-            prefix = args.mutants_list[c][:-10]
+            prefix = protein_name + '_' + args.mutants_list[c][:-10]
         # fingerprint file would not be generated if all variants in current fasta file are matched to other fasta files
         if len(fingerprint_file_list) > 0:
-            # Create the work directory
-            mkdir(prefix)
-            rename(args.mutants_list[c], prefix + '/' + args.mutants_list[c])
             # Write point mutation information of all variants to the fingerprint file
-            p_fingerprint = open(prefix + '/' + prefix + '.fingerprint', 'a+')
+            p_fingerprint = open(prefix + '.fingerprint', 'a+')
             p_fingerprint.writelines(fingerprint_file_list)
             p_fingerprint.close()
         # mutfile would not be generated if all variants in current fasta file are wild type 
         # or all variants in current fasta file are matched to other fasta files
         if len(mut_file_list) > 0:
             # Write out to mutfile (here the mutant_list file name ends with the job index)
-            if isfile(prefix + '/' + prefix + '.mut'):
+            if isfile(prefix + '.mut'):
                 # Read the original mutfile
-                p_mut = open(prefix + '/' + prefix + '.mut', 'r')
+                p_mut = open(prefix + '.mut', 'r')
                 mut_list_bak = p_mut.readlines()
                 p_mut.close()
                 # Remove the original mutfile
-                remove(prefix + '/' + prefix + '.mut')
+                remove(prefix + '.mut')
                 # Calculate original total number of the point mutations
                 total_mutations_old = int(mut_list_bak[0].split(' ')[1][:-1])
                 # Rewrite the mutfile
-                p_mut = open(prefix + '/' + prefix + '.mut', 'w+')
+                p_mut = open(prefix + '.mut', 'w+')
                 # Calculate current total number of the point mutations
                 total_mutations += total_mutations_old
                 p_mut.write('total ' + str(total_mutations) + '\n')
@@ -511,7 +508,7 @@ if __name__ == '__main__':
                         p_mut.write(mut + '\n')
                 p_mut.close()
             else:
-                p_mut = open(prefix + '/' + prefix + '.mut', 'w+')
+                p_mut = open(prefix + '.mut', 'w+')
                 p_mut.write('total ' + str(total_mutations) + '\n')
                 for mut_list in mut_file_list:
                     p_mut.write(str(len(mut_list)) + '\n')

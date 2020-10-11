@@ -197,8 +197,8 @@ def parse_args():
         The first is the number of partitions, the second is which partition \
         member to run on this processor, from 1 to the number of partitions. \
         not working for now.')
-    parser.add_argument('-debug', '--debugging_mode', action='store_true', 
-        help='Giving a flag of -debug will plot the per-residue scores of the \
+    parser.add_argument('-plot', '--generate_plots', action='store_true', 
+        help='Giving a flag of -plot will plot the per-residue scores of the \
         mutated pose and the reference pose.')
     return parser.parse_args()
 
@@ -1322,12 +1322,12 @@ def analyze_mutant_protein(seqrecord, ref_pose, score_functions, query, pdb_seq,
         if 'TRUE' not in tmp:
             mut_tags['energy_change'] = 'NA'
             mut_tags['rmsd'] = 'NA'
-
-        # Set future calculations to use the mutated pose
-        ref_pose_copy = pr.Pose(ref_pose)
     else:
         mutated_pose = None
-        ref_pose_copy = pr.Pose(ref_pose)
+        modified_ref_pose = None
+
+    # Set future calculations to use the mutated pose
+    ref_pose_copy = pr.Pose(ref_pose)
     # Add substitution layer to output data
     layers = [identify_res_layer(ref_pose_copy, pm[0], main_chain=list(fa_ind.values())[0]+1) 
         for pm in new_subs]
@@ -1658,15 +1658,15 @@ def main(args):
                 mutated_pose.dump_pdb(outname)
 
                 # Generate a per-residue energy comparison plot if debugging
-                if args.debugging_mode:
+                if args.generate_plots:
                     plot_res_ddG(ref_pose.clone(), modified_ref_pose, mutated_pose,  
                     score_functions[1], outname[:-4] + '_res_score_changes.png')
 
             # Append individual mutant data to aggregate
             all_mutants_info = all_mutants_info.append(single_mutant_info)
-            for s in subs_clean:
-    #            if s not in all_substitutions:
-                    all_substitutions.append(s)
+            # for s in subs_clean:
+            #     #if s not in all_substitutions:
+            #         all_substitutions.append(s)
 
     # Make report names
     if args.report_name:
@@ -1688,15 +1688,15 @@ def main(args):
     all_mutants_info.to_csv(main_report_name, index=False)
 
     # Make substitutions summary a DataFrame, sort it, and output to csv
-    counts = []
-    all_subs_clean = list(set(all_substitutions))
-    for sub in all_subs_clean:
-        counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
-    all_subs_info = pd.DataFrame(all_subs_clean)
-    all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
-    all_subs_info['count'] = counts
-    all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
-    all_subs_info.to_csv(subs_report_name, index=False)
+    # counts = []
+    # all_subs_clean = list(set(all_substitutions))
+    # for sub in all_subs_clean:
+    #     counts.append(np.sum(np.asarray([sub == x for x in all_substitutions],dtype=bool)))
+    # all_subs_info = pd.DataFrame(all_subs_clean)
+    # all_subs_info.columns = ['chain', 'site', 'native', 'mutant']
+    # all_subs_info['count'] = counts
+    # all_subs_info = all_subs_info.sort_values(by=['chain', 'site', 'mutant'])
+    # all_subs_info.to_csv(subs_report_name, index=False)
 
 
 if __name__ == '__main__':
