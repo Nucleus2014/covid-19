@@ -1,13 +1,13 @@
-import os
 import argparse
-
+import os
+import shutil
 
 def read_fasta(fasta_file_name, variant_dict, variant_list_list):
-    #variant_dict = {"variant_name_3": [[fasta_name_a, line1, ...], [fasta_name_b line1, ...]], 
+    #variant_dict = {"variant_name_3": [[fasta_name_a, line1, ...], [fasta_name_b, line1, ...]], 
     #    "variant_name_2": [[fasta_name_a, line1, ...]], "variant_name_4": [[fasta_name_a, line1, ...]], 
     #    "variant_name_1": [[fasta_name_b, line1, ...]], ...}
 
-    #seq_line_list_list = [[fasta_name_a, line1, ...], [fasta_name_b line1, ...]]
+    #seq_line_list_list = [[fasta_name_a, line1, ...], [fasta_name_b, line1, ...]]
 
     #seq_line_list = [fasta_name_a, line1, ...]
 
@@ -31,9 +31,9 @@ def read_fasta(fasta_file_name, variant_dict, variant_list_list):
                 elif flag == 1: # At the first line of the first variant block
 
                     # Write the reference block to the matched_0 and matched fasta files.
-                    with open(fasta_name +  '_matched_0.fasta.txt', 'w+') as new_fasta:
+                    with open(fasta_name +  '_reference.fasta.txt', 'w+') as new_fasta:
                         new_fasta.writelines(seq_line_list[1:])
-                    with open(fasta_name + '_matched.fasta.txt', 'w+') as new_fasta:
+                    with open(fasta_name + '_unmatched.fasta.txt', 'w+') as new_fasta:
                         new_fasta.writelines(seq_line_list[1:])
                     
                     # Get the name of this variant from the first line of this block
@@ -75,7 +75,7 @@ def read_fasta(fasta_file_name, variant_dict, variant_list_list):
         variant_list_list.append(variant_list)
 
 def write_sequences(variant_dict, variant_list_list):
-    #variant_dict = {"variant_name_3": [[fasta_name_a, line1, ...], [fasta_name_b line1, ...]], 
+    #variant_dict = {"variant_name_3": [[fasta_name_a, line1, ...], [fasta_name_b, line1, ...]], 
     #    "variant_name_2": [[fasta_name_a, line1, ...]], "variant_name_4": [[fasta_name_a, line1, ...]], 
     #    "variant_name_1": [[fasta_name_b, line1, ...]], ...}
 
@@ -85,18 +85,24 @@ def write_sequences(variant_dict, variant_list_list):
 
     #variant_list = [variant_name_1, variant_name_2, variant_name_3, ...]
 
+    matched_variants = 1
     for variant_list in variant_list_list:
         for variant in variant_list:
             seq_line_list_list = variant_dict.pop(variant, None)
             if seq_line_list_list:
                 if len(seq_line_list_list) == 1:
                     seq_line_list = seq_line_list_list[0]
-                    with open(seq_line_list[0] + '_matched.fasta.txt', 'a+') as p_fasta:
+                    with open(seq_line_list[0] + '_unmatched.fasta.txt', 'a+') as p_fasta:
                         p_fasta.writelines(seq_line_list[1:])
                 else:
                     for seq_line_list in seq_line_list_list:
-                        with open(seq_line_list[0] + '_matched_0.fasta.txt', 'a+') as p_fasta:
+                        shutil.copy(seq_line_list[0] + '_reference.fasta.txt', \
+                            seq_line_list[0] + '_matched_' + str(matched_variants) + '.fasta.txt')
+                        with open(seq_line_list[0] + '_matched_' + str(matched_variants) + '.fasta.txt', 'a+') as p_fasta:
                             p_fasta.writelines(seq_line_list[1:])
+                    matched_variants += 1
+    for reference_fasta in filter(lambda x: x.endswith('_reference.fasta.txt'), os.listdir()):
+        os.remove(reference_fasta)
 
 
 if __name__ == '__main__':
